@@ -59,6 +59,14 @@ export default function Home() {
   const [toast, setToast] = useState(false);
   const t = copy[lang];
   useEffect(() => { document.documentElement.lang = lang; }, [lang]);
+  useEffect(() => {
+    const elements = document.querySelectorAll('.section, .stats');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => { if (entry.isIntersecting) entry.target.classList.add('is-visible'); });
+    }, { threshold: 0.12 });
+    elements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
   const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const data = new FormData(event.currentTarget); window.open(wa(`Hello MRJ Best Bakery!\nName: ${data.get('name')}\nPhone: ${data.get('mobile')}\nEnquiry: ${data.get('message')}`), '_blank'); setToast(true); setTimeout(() => setToast(false), 3500); };
   const nav = [['home', t.home], ['about', t.about], ['products', t.products], ['wholesale', t.wholesale], ['gallery', t.gallery], ['contact', t.contact]];
   return <main>
