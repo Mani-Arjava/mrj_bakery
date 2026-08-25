@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 
 const phone = '918248395591';
 const wa = (message: string) => `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
@@ -50,6 +50,18 @@ const gallery = [
   ['Swiss Roll', '/images/swiss-roll.jpg', 'Cakes'],
   ['Tea-time Cookies', '/images/cookies.jpg', 'Cakes']
 ];
+const showcasePieces = {
+  'roll-cake': [[35.643, 9.143, 39.857, 35.071], [11.286, 15, 34.857, 34.929], [56, 23.5, 34, 37.357], [11, 50.571, 34.786, 32.643], [31.929, 57.786, 31.857, 33], [54.643, 52.786, 31.786, 33.5]],
+  'coconut-bun': [[2.786, 27.5, 43.286, 43.786], [54.786, 28.143, 42.571, 43.071], [12.214, 52.5, 37.429, 43.214], [13.143, 3.714, 36.714, 43.714], [51, 3.786, 37.5, 43.357], [51.429, 52.571, 36.429, 43]],
+  'milk-bun': [[3.214, 16.786, 46.643, 62.643], [45.357, 28.143, 51.929, 54.929]],
+  cookies: [[35.786, 33.071, 27.929, 18.571], [36.143, 82.071, 27.643, 16.143], [36.429, 65.786, 27.143, 15.786], [35.143, 1.5, 28.357, 15.643], [35.929, 17.714, 27.786, 15.5], [36.357, 52.571, 27.429, 14.143]]
+} as const;
+const showcaseScenes = [
+  { id: 'roll-cake', motion: 'spiral', name: 'Roll Cake', tamil: 'ரோல் கேக்', kicker: 'A SWIRL OF JOY', tamilKicker: 'சுவையின் சுழல்', description: 'Soft sponge, silky cream and a berry-bright swirl.', tamilDescription: 'மென்மையான ஸ்பாஞ்ச், சில்கி கிரீம் மற்றும் பெர்ரி சுவையின் சுழல்.', labels: ['Soft sponge', 'Creamy centre', 'Berry swirl'], tamilLabels: ['மென்மையான ஸ்பாஞ்ச்', 'கிரீம் மையம்', 'பெர்ரி சுழல்'], pieces: showcasePieces['roll-cake'] },
+  { id: 'coconut-bun', motion: 'radial', name: 'Coconut Bun', tamil: 'தேங்காய் பன்', kicker: 'TROPICAL COMFORT', tamilKicker: 'தேங்காயின் இனிமை', description: 'Golden baked softness with a generous coconut filling.', tamilDescription: 'தாராளமான தேங்காய் நிரப்புதலுடன் பொன்னிற மென்மையான பன்.', labels: ['Golden bun', 'Coconut filling', 'Freshly baked'], tamilLabels: ['பொன்னிற பன்', 'தேங்காய் நிரப்பு', 'புதிதாக சுட்டது'], pieces: showcasePieces['coconut-bun'] },
+  { id: 'milk-bun', motion: 'layers', name: 'Milk Bun', tamil: 'பால் பன்', kicker: 'CLOUD-SOFT BITES', tamilKicker: 'மேகம் போன்ற மென்மை', description: 'Pillowy, lightly sweet buns made for any time.', tamilDescription: 'எந்த நேரத்திற்கும் ஏற்ற பஞ்சு போன்ற மென்மையான இனிப்பு பன்கள்.', labels: ['Pillowy soft', 'Milky crumb', 'Daily fresh'], tamilLabels: ['பஞ்சு மென்மை', 'பால் சுவை', 'தினமும் புதிது'], pieces: showcasePieces['milk-bun'] },
+  { id: 'cookies', motion: 'scatter', name: 'Cookies', tamil: 'குக்கீஸ்', kicker: 'THE PERFECT CRUNCH', tamilKicker: 'சரியான மொறுமொறுப்பு', description: 'Buttery little bites with a little chocolate joy.', tamilDescription: 'வெண்ணெய் சுவையுடன் சாக்லேட் மகிழ்ச்சி தரும் சிறு கடிகள்.', labels: ['Buttery bake', 'Chocolate chips', 'Tea-time ready'], tamilLabels: ['வெண்ணெய் சுவை', 'சாக்லேட் சிப்ஸ்', 'தேநீர் நேரம்'], pieces: showcasePieces.cookies }
+];
 
 export default function Home() {
   const [lang, setLang] = useState<'en' | 'ta'>('en');
@@ -57,6 +69,8 @@ export default function Home() {
   const [active, setActive] = useState('All');
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [toast, setToast] = useState(false);
+  const [showcaseIndex, setShowcaseIndex] = useState(0);
+  const showcaseRef = useRef<HTMLElement>(null);
   const t = copy[lang];
   useEffect(() => { document.documentElement.lang = lang; }, [lang]);
   useEffect(() => {
@@ -66,6 +80,21 @@ export default function Home() {
     }, { threshold: 0.12 });
     elements.forEach((element) => observer.observe(element));
     return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    const showcase = showcaseRef.current;
+    if (!showcase) return;
+    let rotation: ReturnType<typeof setInterval> | undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        rotation = setInterval(() => setShowcaseIndex((index) => (index + 1) % showcaseScenes.length), 7600);
+      } else if (rotation) {
+        clearInterval(rotation);
+        rotation = undefined;
+      }
+    }, { threshold: 0.3 });
+    observer.observe(showcase);
+    return () => { observer.disconnect(); if (rotation) clearInterval(rotation); };
   }, []);
   const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const data = new FormData(event.currentTarget); window.open(wa(`Hello MRJ Best Bakery!\nName: ${data.get('name')}\nPhone: ${data.get('mobile')}\nEnquiry: ${data.get('message')}`), '_blank'); setToast(true); setTimeout(() => setToast(false), 3500); };
   const nav = [['home', t.home], ['about', t.about], ['products', t.products], ['wholesale', t.wholesale], ['gallery', t.gallery], ['contact', t.contact]];
@@ -79,6 +108,8 @@ export default function Home() {
     <section className="stats"><div><strong>10+</strong><span>{lang === 'en' ? 'Years of warmth' : 'ஆண்டுகள் அனுபவம்'}</span></div><div><strong>30+</strong><span>{lang === 'en' ? 'Fresh products' : 'புதிய தயாரிப்புகள்'}</span></div><div><strong>1K+</strong><span>{lang === 'en' ? 'Happy customers' : 'மகிழ்ந்த வாடிக்கையாளர்கள்'}</span></div><div><strong>20+</strong><span>{lang === 'en' ? 'Delivery areas' : 'விநியோக இடங்கள்'}</span></div></section>
 
     <section className="moments section"><div className="moments-intro"><p className="eyebrow gold-text">MADE FOR EVERYDAY JOY</p><h2>{lang === 'en' ? <>From our bakery<br/>to your moments.</> : <>எங்கள் பேக்கரியிலிருந்து<br/>உங்கள் மகிழ்ச்சிக்கு.</>}</h2><p>{lang === 'en' ? 'For family tea-time, friendly catch-ups, and the neighbourhood shops that serve everyone.' : 'குடும்ப தேநீர் நேரம், நண்பர்கள் சந்திப்பு மற்றும் அனைவருக்கும் சேவை செய்யும் அருகிலுள்ள கடைகளுக்காக.'}</p></div><div className="moment-cards"><article><img src="/images/family-bakery.png" alt="Indian family enjoying fresh bakery buns" /><div><small>{lang === 'en' ? 'FOR FAMILY' : 'குடும்பத்திற்காக'}</small><h3>{lang === 'en' ? 'Warm moments at home' : 'வீட்டின் இனிய தருணங்கள்'}</h3></div></article><article><img src="/images/friends-bakery.png" alt="Friends sharing bakery treats and tea" /><div><small>{lang === 'en' ? 'FOR FRIENDS' : 'நண்பர்களுக்காக'}</small><h3>{lang === 'en' ? 'Good food, better company' : 'நல்ல உணவு, நல்ல நட்பு'}</h3></div></article><article><img src="/images/retailer-bakery.png" alt="Local retailer receiving fresh bakery supplies" /><div><small>{lang === 'en' ? 'FOR BUSINESS' : 'வணிகத்திற்காக'}</small><h3>{lang === 'en' ? 'Fresh supply, every day' : 'தினமும் புதிய விநியோகம்'}</h3></div></article></div></section>
+
+    <section className="showcase" ref={showcaseRef} aria-label={lang === 'en' ? 'Featured bakery products' : 'சிறப்பு பேக்கரி தயாரிப்புகள்'}>{(() => { const scene = showcaseScenes[showcaseIndex]; const labels = lang === 'en' ? scene.labels : scene.tamilLabels; return <div className="showcase-inner" key={scene.id}><div className="showcase-copy"><p className="eyebrow">{lang === 'en' ? scene.kicker : scene.tamilKicker}</p><p className="showcase-count"><span>0{showcaseIndex + 1}</span> / 0{showcaseScenes.length}</p><h2>{lang === 'en' ? scene.name : scene.tamil}</h2><p>{lang === 'en' ? scene.description : scene.tamilDescription}</p><a className="button showcase-button" href="#products">{lang === 'en' ? 'Explore products' : 'தயாரிப்புகளைப் பாருங்கள்'} <b>→</b></a></div><div className="showcase-stage" aria-hidden="true"><div className="showcase-orbit orbit-one" /><div className="showcase-orbit orbit-two" /><div className={`showcase-product motion-${scene.motion}`}>{scene.pieces.map(([left, top, width, height], index) => <img className={`showcase-piece actual-piece part-${index}`} src={`/images/showcase/pieces/${scene.id}/piece-${index + 1}.png`} style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }} alt="" key={index} />)}</div>{labels.map((label, index) => <div className={`showcase-label label-${index + 1}`} key={label}><i /><span>{label}</span></div>)}</div><div className="showcase-progress"><i style={{ width: `${((showcaseIndex + 1) / showcaseScenes.length) * 100}%` }} /></div></div>; })()}</section>
 
     <section className="products section" id="products"><div className="section-intro"><p className="eyebrow gold-text">FROM OUR OVEN</p><h2>{t.productsTitle.split('\n').map((x, i) => <span key={i}>{x}</span>)}</h2><p>{t.productsText}</p></div><div className="product-grid">{products.map(([name, tamil, desc, image], index) => <article className="product-card" key={name}><div className="product-image"><img src={image} alt={`${name} from MRJ Best Bakery`} /></div><div className="product-info"><small>{lang === 'en' ? 'FRESH DAILY' : 'தினமும் புதிது'}</small><h3>{lang === 'en' ? name : tamil}</h3><p>{desc}</p><a href={wa(`Hello MRJ Best Bakery! I would like to enquire about ${name}.`)} target="_blank">{t.enquire} <b>↗</b></a></div></article>)}</div></section>
 
