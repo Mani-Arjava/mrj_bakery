@@ -1,0 +1,5 @@
+import { NextResponse } from 'next/server';
+import { isInventoryAuthenticated } from '@/lib/inventory/auth';
+import { addMaster, masterData } from '@/lib/inventory/excel';
+export async function GET() { if (!await isInventoryAuthenticated()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); try { return NextResponse.json(await masterData()); } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Unable to read master data.' }, { status: 502 }); } }
+export async function POST(request: Request) { if (!await isInventoryAuthenticated()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); try { const body = await request.json() as { kind?: 'supplier' | 'customer' | 'item'; data?: Record<string, unknown> }; if (!body.kind || !body.data?.name) return NextResponse.json({ error: 'A type and name are required.' }, { status: 400 }); const id = await addMaster(body.kind, body.data); return NextResponse.json({ id }, { status: 201 }); } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not save master data.' }, { status: 502 }); } }
