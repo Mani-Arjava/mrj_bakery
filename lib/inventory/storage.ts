@@ -2,8 +2,6 @@
 // All data persists locally in the browser
 // Can be exported as JSON backup and imported
 
-import { randomUUID } from 'crypto';
-
 const STORAGE_KEY = 'bakery_inventory_data';
 
 export interface StorageData {
@@ -55,6 +53,12 @@ export function initStorage() {
   }
 }
 
+export function clearData() {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(STORAGE_KEY);
+  initStorage();
+}
+
 export function getData(): StorageData {
   if (typeof window === 'undefined') return defaultData;
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -72,11 +76,6 @@ export function getData(): StorageData {
 export function saveData(data: StorageData) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
-
-export function clearData() {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(STORAGE_KEY);
 }
 
 // ============= Master Data Operations =============
@@ -573,7 +572,7 @@ export function getDashboard() {
 }
 
 // ============= Audit =============
-function logAudit(action: string, entityType: string, entityId: string) {
+export function logAudit(action: string, entityType: string, entityId: string) {
   const data = getData();
   data.auditLog.push({
     id: getId(),
