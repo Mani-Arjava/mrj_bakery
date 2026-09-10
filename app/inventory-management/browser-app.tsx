@@ -1,5 +1,5 @@
 'use client';
-import React, { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { FormEvent, useCallback, useEffect, useState } from 'react';
 import type { DashboardData } from '@/lib/inventory/types';
 import * as storage from '@/lib/inventory/storage';
 
@@ -70,8 +70,8 @@ export default function BrowserApp() {
     return <LoginScreen onLogin={() => { localStorage.setItem('bakery_auth', '1'); setLoggedIn(true); }} />;
   }
 
-  const rawMaterials = useMemo(() => items.filter(i => i.type === 'RAW_MATERIAL'), [items]);
-  const finishedProducts = useMemo(() => items.filter(i => i.type === 'FINISHED_GOOD'), [items]);
+  const rawMaterials = items.filter(i => i.type === 'RAW_MATERIAL');
+  const finishedProducts = items.filter(i => i.type === 'FINISHED_GOOD');
 
   return (
     <main className="im-app">
