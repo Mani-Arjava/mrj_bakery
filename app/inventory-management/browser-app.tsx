@@ -66,14 +66,6 @@ export default function BrowserApp() {
     }
   }
 
-  if (!hydrated) {
-    return (
-      <div className="im-login" style={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>
-        <p style={{ color: 'var(--muted)' }}>Loading…</p>
-      </div>
-    );
-  }
-
   if (!loggedIn) {
     return <LoginScreen onLogin={() => { localStorage.setItem('bakery_auth', '1'); setLoggedIn(true); }} />;
   }
