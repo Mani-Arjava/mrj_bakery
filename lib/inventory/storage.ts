@@ -551,6 +551,29 @@ export function getDashboard() {
   const sale = sales.reduce((s: number, r: any) => s + Number(r.totalPaise), 0);
   const expense = expenses.reduce((s: number, r: any) => s + Number(r.amountPaise), 0);
 
+  // All-time supplier outstanding
+  const totalPurchased = data.purchaseInvoices.reduce((s: number, r: any) => s + Number(r.billAmountPaise), 0);
+  const totalSupplierPaid = data.supplierPayments.reduce((s: number, r: any) => s + Number(r.amountPaise), 0);
+  const supplierOutstanding = totalPurchased - totalSupplierPaid;
+
+  // All-time customer outstanding
+  const totalSales = data.salesInvoices.reduce((s: number, r: any) => s + Number(r.totalPaise), 0);
+  const totalCustomerPaid = data.customerPayments.reduce((s: number, r: any) => s + Number(r.amountPaise), 0);
+  const customerOutstanding = totalSales - totalCustomerPaid;
+
+  // Top products by quantity sold
+  const productSales = new Map<string, number>();
+  for (const line of data.salesLines) {
+    productSales.set(line.itemId, (productSales.get(line.itemId) || 0) + Number(line.quantity));
+  }
+  const topProducts = Array.from(productSales.entries())
+    .map(([itemId, qty]) => {
+      const item = master.items.find(i => i.id === itemId);
+      return { item: item || { id: itemId, name: itemId }, quantity: qty };
+    })
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 5);
+
   return {
     generatedAt: new Date().toISOString(),
     configured: true,
@@ -560,13 +583,13 @@ export function getDashboard() {
       todayPurchasePaise: purchase,
       todayProductionUnits: production.reduce((s: number, r: any) => s + Number(r.quantityProduced), 0),
       todaySalesPaise: sale,
-      supplierOutstandingPaise: purchases.reduce((s: number, r: any) => s + Math.max(0, Number(r.billAmountPaise) - Number(r.paidAmountPaise)), 0),
-      customerOutstandingPaise: sales.reduce((s: number, r: any) => s + Math.max(0, Number(r.totalPaise) - Number(r.paidAmountPaise)), 0),
+      supplierOutstandingPaise: supplierOutstanding,
+      customerOutstandingPaise: customerOutstanding,
       todayExpensePaise: expense,
       todayProfitPaise: sale - expense
     },
     lowStock,
-    topProducts: [],
+    topProducts,
     recentActivity: []
   };
 }
@@ -584,6 +607,102 @@ export function logAudit(action: string, entityType: string, entityId: string) {
     idempotencyKey: getId()
   });
   saveData(data);
+}
+
+// ============= Reports =============
+export function getStockReport() {
+  const data = getData();
+  const master = getMasterData();
+
+  return master.items.map(item => {
+    const bal = getStockBalance(item.id);
+    const value = bal.quantity * bal.averageCostPaise;
+    const status = bal.quantity <= item.reorderLevel ? 'LOW' : 'OK';
+    return {
+      id: item.id,
+      name: item.name,
+      type: item.type,
+      quantity: bal.quantity,
+      unit: item.baseUnit,
+      value,
+      status,
+      reorderLevel: item.reorderLevel
+    };
+  });
+}
+
+export function getSupplierAnalysis() {
+  const data = getData();
+  const master = getMasterData();
+
+  return master.suppliers.map(supplier => {
+    const invoices = data.purchaseInvoices.filter(p => p.supplierId === supplier.id);
+    const payments = data.supplierPayments.filter(p => p.supplierId === supplier.id);
+
+    const totalPurchased = invoices.reduce((s, p) => s + Number(p.billAmountPaise), 0);
+    const totalPaid = payments.reduce((s, p) => s + Number(p.amountPaise), 0);
+    const outstanding = totalPurchased - totalPaid;
+
+    return {
+      id: supplier.id,
+      name: supplier.name,
+      totalPurchased,
+      totalPaid,
+      outstanding
+    };
+  });
+}
+
+export function getCustomerAnalysis() {
+  const data = getData();
+  const master = getMasterData();
+
+  return master.customers.map(customer => {
+    const invoices = data.salesInvoices.filter(s => s.customerId === customer.id);
+    const payments = data.customerPayments.filter(p => p.customerId === customer.id);
+
+    const totalSales = invoices.reduce((s, inv) => s + Number(inv.totalPaise), 0);
+    const totalPaid = payments.reduce((s, p) => s + Number(p.amountPaise), 0);
+    const outstanding = totalSales - totalPaid;
+
+    return {
+      id: customer.id,
+      name: customer.name,
+      customerType: customer.customerType || 'RETAIL',
+      totalSales,
+      totalPaid,
+      outstanding
+    };
+  });
+}
+
+export function getExpenseReport() {
+  const data = getData();
+  const categories = new Map<string, number>();
+
+  for (const expense of data.expenses) {
+    const cat = expense.category || 'Other';
+    categories.set(cat, (categories.get(cat) || 0) + Number(expense.amountPaise));
+  }
+
+  const byCategory = Array.from(categories.entries())
+    .map(([category, amountPaise]) => ({ category, amountPaise }))
+    .sort((a, b) => b.amountPaise - a.amountPaise);
+
+  const grandTotalPaise = byCategory.reduce((s, c) => s + c.amountPaise, 0);
+
+  return { byCategory, grandTotalPaise };
+}
+
+export function getProfitReport() {
+  const data = getData();
+
+  const totalSalesPaise = data.salesInvoices.reduce((s, inv) => s + Number(inv.totalPaise), 0);
+  const totalExpensesPaise = data.expenses.reduce((s, exp) => s + Number(exp.amountPaise), 0);
+  const estimatedProfitPaise = totalSalesPaise - totalExpensesPaise;
+  const marginPercent = totalSalesPaise ? Math.round((estimatedProfitPaise / totalSalesPaise) * 100) : 0;
+
+  return { totalSalesPaise, totalExpensesPaise, estimatedProfitPaise, marginPercent };
 }
 
 // ============= Export/Import =============
