@@ -15,7 +15,8 @@ type View = 'Dashboard' | 'Items' | 'Purchases' | 'Customers' | 'Production' | '
 interface Stock { [key: string]: { quantity: number; averageCostPaise: number } }
 
 export default function BrowserApp() {
-  const [loggedIn, setLoggedIn] = useState(() => typeof window !== 'undefined' && localStorage.getItem('bakery_auth') === '1');
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [view, setView] = useState<View>('Dashboard');
   const [dashboard, setDashboard] = useState(empty);
   const [items, setItems] = useState<any[]>([]);
@@ -27,11 +28,11 @@ export default function BrowserApp() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (loggedIn) {
-      storage.initStorage();
-      refresh();
-    }
-  }, [loggedIn]);
+    storage.initStorage();
+    setLoggedIn(localStorage.getItem('bakery_auth') === '1');
+    setHydrated(true);
+    refresh();
+  }, []);
 
   const refresh = useCallback(() => {
     try {
@@ -54,7 +55,7 @@ export default function BrowserApp() {
       setNotice('');
       setLoading(true);
       action();
-      setNotice('✓ Saved successfully');
+      setNotice('Saved successfully');
       await new Promise(r => setTimeout(r, 300));
       refresh();
       setTimeout(() => setNotice(''), 3000);
@@ -63,6 +64,14 @@ export default function BrowserApp() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (!hydrated) {
+    return (
+      <div className="im-login" style={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>
+        <p style={{ color: 'var(--muted)' }}>Loading…</p>
+      </div>
+    );
   }
 
   if (!loggedIn) {
@@ -111,10 +120,10 @@ export default function BrowserApp() {
             <p className="im-kicker">INVENTORY CONTROL</p>
             <h1>{view}</h1>
           </div>
-          <span className="im-date">{new Intl.DateTimeFormat('en-IN', { dateStyle: 'full' }).format(new Date())}</span>
+          <span className="im-date" suppressHydrationWarning>{new Intl.DateTimeFormat('en-IN', { dateStyle: 'full' }).format(new Date())}</span>
         </header>
 
-        {notice && <div className="im-notice">✓ {notice}</div>}
+        {notice && <div className="im-notice">{notice}</div>}
         {error && <div className="im-error im-banner">{error}</div>}
 
         {view === 'Dashboard' && <Dashboard data={dashboard} onNavigate={setView} hasData={suppliers.length > 0 || customers.length > 0 || items.length > 0} />}
@@ -196,6 +205,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
                   color: '#718078',
                   padding: '4px 8px'
                 }}
+                title={showPassword ? 'Hide password' : 'Show password'}
               >
                 {showPassword ? '👁️' : '👁️‍🗨️'}
               </button>
@@ -481,9 +491,10 @@ function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
   const [addingSupplier, setAddingSupplier] = useState(false);
   const [supplierForm, setSupplierForm] = useState({ name: '', phone: '', contactPerson: '', address: '' });
   const [date, setDate] = useState(today());
+  const [expandedBillId, setExpandedBillId] = useState<string | null>(null);
 
   const total = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.price || 0), 0);
-  const bills = selectedSupplier ? storage.getData().purchaseInvoices.filter(b => b.supplierId === selectedSupplier.id && b.date === date) : [];
+  const purchaseHistory = storage.getPurchaseHistory();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -619,17 +630,6 @@ function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
           <p className="im-kicker">PURCHASE BILL</p>
           <h2>Record purchase</h2>
 
-          {bills.length > 0 && (
-            <div style={{ marginTop: '24px', padding: '15px', backgroundColor: '#f9faf7', borderRadius: '8px', marginBottom: '24px' }}>
-              <p style={{ margin: '0 0 10px', fontSize: '12px', fontWeight: 700 }}>Bills on {date}</p>
-              {bills.map(bill => (
-                <div key={bill.id} style={{ fontSize: '12px', padding: '8px 0', borderTop: '1px solid #edf0eb' }}>
-                  <b>{bill.billNumber || 'Bill #' + bill.id.slice(0, 6)}</b> · {money(bill.billAmountPaise)} <span style={{ color: '#8b8b8b' }}>| Paid: {money(bill.paidAmountPaise)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
           <div className="im-line-head">
             <span>Item</span><span>Qty</span><span>Unit</span><span>Rate ₹</span><span>Total</span>
           </div>
@@ -690,6 +690,51 @@ function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
           </div>
         </>
       )}
+
+      {purchaseHistory.length > 0 && (
+        <div style={{ marginTop: '48px', paddingTop: '24px', borderTop: '2px solid var(--line)' }}>
+          <p className="im-kicker">PURCHASE HISTORY</p>
+          <h3>All purchases</h3>
+          <table style={{ width: '100%', marginTop: '12px', fontSize: '12px' }}>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Supplier</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Paid</th>
+                <th>Pending</th>
+              </tr>
+            </thead>
+            <tbody>
+              {purchaseHistory.map(bill => (
+                <React.Fragment key={bill.id}>
+                  <tr onClick={() => setExpandedBillId(expandedBillId === bill.id ? null : bill.id)} style={{ cursor: 'pointer', backgroundColor: expandedBillId === bill.id ? '#f9faf7' : 'transparent' }}>
+                    <td>{bill.date}</td>
+                    <td>{bill.supplierName}</td>
+                    <td>{bill.lineCount} item(s)</td>
+                    <td>{money(bill.billAmountPaise)}</td>
+                    <td>{money(bill.paidAmountPaise)}</td>
+                    <td style={{ fontWeight: 700, color: bill.pendingPaise > 0 ? '#bd4c3e' : '#79c998' }}>{money(bill.pendingPaise)}</td>
+                  </tr>
+                  {expandedBillId === bill.id && (
+                    <tr style={{ backgroundColor: '#f9faf7' }}>
+                      <td colSpan={6} style={{ padding: '12px', fontSize: '11px' }}>
+                        {bill.lines.map((line, idx) => (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: idx > 0 ? '1px solid #edf0eb' : 'none' }}>
+                            <span><b>{line.itemName}</b> {line.quantity} {line.unit}</span>
+                            <span>{money(line.totalPaise)}</span>
+                          </div>
+                        ))}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -697,41 +742,42 @@ function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
 function CustomerWorkspace({ customers, items, save, refresh }: any) {
   const [type, setType] = useState<'WHOLESALE' | 'RETAIL'>('RETAIL');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
-  const [selectedItem, setSelectedItem] = useState(items[0]?.id || '');
-  const [quantity, setQuantity] = useState('');
-  const [rate, setRate] = useState('');
-  const [paid, setPaid] = useState('');
+  const [saleDate, setSaleDate] = useState(today());
+  const [saleLines, setSaleLines] = useState([{ itemId: '', quantity: '', rate: '' }]);
+  const [salePaid, setSalePaid] = useState('');
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [customerForm, setCustomerForm] = useState({ name: '', phone: '', contactPerson: '', address: '' });
 
   const filteredCustomers = customers.filter((c: any) => c.customerType === type || !c.customerType);
 
+  const saleTotal = saleLines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.rate || 0), 0);
+
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!selectedCustomer || !selectedItem || !quantity || !rate) return;
+    if (!selectedCustomer) return;
 
-    const total = Number(quantity) * Number(rate);
+    const valid = saleLines.filter(l => l.itemId && Number(l.quantity) > 0 && Number(l.rate) > 0);
+    if (!valid.length) return;
+
     save(() => {
       storage.postSale({
-        date: today(),
+        date: saleDate,
         customerId: selectedCustomer.id,
         saleType: selectedCustomer.customerType || 'RETAIL',
-        lines: [{
-          itemId: selectedItem,
-          quantity: Number(quantity),
+        lines: valid.map(l => ({
+          itemId: l.itemId,
+          quantity: Number(l.quantity),
           unit: 'piece',
-          unitPricePaise: Math.round(Number(rate) * 100)
-        }],
-        paidAmountPaise: Math.round(Number(paid || 0) * 100),
+          unitPricePaise: Math.round(Number(l.rate) * 100)
+        })),
+        paidAmountPaise: Math.round(Number(salePaid || 0) * 100),
         note: ''
       });
     });
 
     setSelectedCustomer(null);
-    setSelectedItem(items[0]?.id || '');
-    setQuantity('');
-    setRate('');
-    setPaid('');
+    setSaleLines([{ itemId: '', quantity: '', rate: '' }]);
+    setSalePaid('');
   }
 
   const handleAddCustomer = (e: FormEvent) => {
@@ -826,30 +872,64 @@ function CustomerWorkspace({ customers, items, save, refresh }: any) {
           <p className="im-kicker">SALE</p>
           <h2>Record sale</h2>
 
-          <div className="im-three">
-            <label>
-              Product
-              <select value={selectedItem} onChange={e => setSelectedItem(e.target.value)} required>
+          <div className="im-two" style={{ marginBottom: '24px' }}>
+            <label>Date<input type="date" value={saleDate} onChange={e => setSaleDate(e.target.value)} /></label>
+            <label></label>
+          </div>
+
+          <div className="im-line-head">
+            <span>Product</span><span>Qty</span><span>Rate ₹</span><span>Total</span>
+          </div>
+
+          {saleLines.map((line, idx) => (
+            <div className="im-purchase-line" key={idx} style={{ gridTemplateColumns: '2fr .7fr 1fr 1fr 25px' }}>
+              <select
+                value={line.itemId}
+                onChange={e => setSaleLines(saleLines.map((l, i) => i === idx ? { ...l, itemId: e.target.value } : l))}
+                required
+              >
                 <option value="">Select product…</option>
                 {items.map((i: any) => <option key={i.id} value={i.id}>{i.name}</option>)}
               </select>
-            </label>
+              <input
+                value={line.quantity}
+                onChange={e => setSaleLines(saleLines.map((l, i) => i === idx ? { ...l, quantity: e.target.value } : l))}
+                type="number"
+                min="0.01"
+                step="0.01"
+                required
+              />
+              <input
+                value={line.rate}
+                onChange={e => setSaleLines(saleLines.map((l, i) => i === idx ? { ...l, rate: e.target.value } : l))}
+                type="number"
+                min="0"
+                step="0.01"
+                required
+              />
+              <b>{money(Math.round(Number(line.quantity || 0) * Number(line.rate || 0) * 100))}</b>
+              {saleLines.length > 1 && (
+                <button
+                  type="button"
+                  className="im-remove"
+                  onClick={() => setSaleLines(saleLines.filter((_, i) => i !== idx))}
+                >×</button>
+              )}
+            </div>
+          ))}
+
+          <button type="button" className="im-text-button" onClick={() => setSaleLines([...saleLines, { itemId: '', quantity: '', rate: '' }])}>
+            + Add product
+          </button>
+
+          <div className="im-bill-total">
             <label>
-              Quantity
-              <input value={quantity} onChange={e => setQuantity(e.target.value)} type="number" min="0.01" step="0.01" required />
+              Paid (₹)
+              <input value={salePaid} onChange={e => setSalePaid(e.target.value)} type="number" min="0" step="0.01" />
             </label>
-            <label>
-              Rate (₹)
-              <input value={rate} onChange={e => setRate(e.target.value)} type="number" min="0" step="0.01" required />
-            </label>
+            <strong>Total: {money(Math.round(saleTotal * 100))}</strong>
+            <button onClick={submit}>Post Sale →</button>
           </div>
-
-          <label>
-            Paid (₹)
-            <input value={paid} onChange={e => setPaid(e.target.value)} type="number" min="0" step="0.01" />
-          </label>
-
-          <button onClick={submit}>Post Sale →</button>
         </>
       )}
     </div>
@@ -857,6 +937,19 @@ function CustomerWorkspace({ customers, items, save, refresh }: any) {
 }
 
 function ProductionWorkspace({ products, materials, save, refresh }: any) {
+  if (products.length === 0) {
+    return (
+      <div className="im-form">
+        <p className="im-kicker">PRODUCTION</p>
+        <h2>Record production batch</h2>
+        <div className="im-empty">
+          <b>No finished products yet</b>
+          <p>Add finished goods in Items first, then define recipes for them before recording production batches.</p>
+        </div>
+      </div>
+    );
+  }
+
   const [selectedProduct, setSelectedProduct] = useState('');
   const [plannedQty, setPlannedQty] = useState('');
   const [actualQty, setActualQty] = useState('');
@@ -927,6 +1020,10 @@ function ProductionWorkspace({ products, materials, save, refresh }: any) {
       <p className="im-kicker">PRODUCTION</p>
       <h2>Record production batch</h2>
 
+      {selectedProduct === '' && (
+        <p style={{ color: 'var(--muted)', fontSize: '13px', marginTop: '16px' }}>Select a product above to begin</p>
+      )}
+
       <label>
         Product
         <select value={selectedProduct} onChange={e => { setSelectedProduct(e.target.value); setConfirmed(false); setStockCheck([]); }} required>
@@ -935,7 +1032,7 @@ function ProductionWorkspace({ products, materials, save, refresh }: any) {
         </select>
       </label>
 
-      {recipe && recipe.lines.length > 0 ? (
+      {selectedProduct !== '' && recipe && recipe.lines.length > 0 ? (
         <>
           <p className="im-form-subtitle">Production Planning</p>
           <div className="im-two">
@@ -1016,17 +1113,30 @@ function ProductionWorkspace({ products, materials, save, refresh }: any) {
             </table>
           </div>
         </>
-      ) : (
+      ) : selectedProduct !== '' && (!recipe || recipe.lines.length === 0) ? (
         <div className="im-notice" style={{ background: '#e2f2dd', color: '#285d40' }}>
           <strong>ℹ Recipe required</strong>
-          <p>Define a recipe for {selectedProduct ? 'this product' : 'the selected product'} in the Recipes section first.</p>
+          <p>Define a recipe for <b>{recipe?.productName || 'this product'}</b> in the Recipes section first.</p>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
 
 function RecipesWorkspace({ products, materials, save, refresh }: any) {
+  if (products.length === 0) {
+    return (
+      <div className="im-form">
+        <p className="im-kicker">RECIPES</p>
+        <h2>Manage recipes</h2>
+        <div className="im-empty">
+          <b>No finished products yet</b>
+          <p>Add finished goods in Items first to start defining recipes.</p>
+        </div>
+      </div>
+    );
+  }
+
   const [selectedProduct, setSelectedProduct] = useState('');
   const [recipe, setRecipe] = useState<any>(null);
   const [lines, setLines] = useState<Array<{ materialId: string; quantity: string; unit: string }>>([]);

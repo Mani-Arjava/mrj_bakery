@@ -399,7 +399,7 @@ export function getSupplierLedger(supplierId: string) {
 
   return {
     ledger: withRunningBalance,
-    summary: { totalPurchased, totalPaid, totalAdvance, outstanding: totalPurchased - totalPaid + totalAdvance }
+    summary: { totalPurchased, totalPaid, totalAdvance, outstanding: totalPurchased - totalPaid - totalAdvance }
   };
 }
 
@@ -607,6 +607,37 @@ export function logAudit(action: string, entityType: string, entityId: string) {
     idempotencyKey: getId()
   });
   saveData(data);
+}
+
+// ============= Purchase History =============
+export function getPurchaseHistory() {
+  const data = getData();
+  const master = getMasterData();
+  const supplierMap = new Map(master.suppliers.map(s => [s.id, s]));
+  const itemMap = new Map(master.items.map(i => [i.id, i]));
+
+  return data.purchaseInvoices
+    .map(inv => {
+      const lines = data.purchaseLines.filter(l => l.invoiceId === inv.id);
+      return {
+        id: inv.id,
+        date: inv.date,
+        supplierId: inv.supplierId,
+        supplierName: supplierMap.get(inv.supplierId)?.name || 'Unknown',
+        billAmountPaise: Number(inv.billAmountPaise),
+        paidAmountPaise: Number(inv.paidAmountPaise),
+        pendingPaise: Math.max(0, Number(inv.billAmountPaise) - Number(inv.paidAmountPaise)),
+        lineCount: lines.length,
+        lines: lines.map(l => ({
+          itemName: itemMap.get(l.itemId)?.name || l.itemId,
+          quantity: l.quantity,
+          unit: l.unit,
+          unitPricePaise: Number(l.unitPricePaise),
+          totalPaise: Number(l.totalPaise)
+        }))
+      };
+    })
+    .sort((a, b) => b.date.localeCompare(a.date));
 }
 
 // ============= Reports =============
