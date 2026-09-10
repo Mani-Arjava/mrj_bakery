@@ -1,5 +1,5 @@
 'use client';
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import type { DashboardData } from '@/lib/inventory/types';
 import * as storage from '@/lib/inventory/storage';
 
@@ -673,7 +673,7 @@ function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
             </div>
           ))}
           <datalist id="raw-items">
-            {items.map(item => <option value={item.name} key={item.id} />)}
+            {items.map((item: typeof items[0]) => <option value={item.name} key={item.id} />)}
           </datalist>
 
           <button type="button" className="im-text-button" onClick={() => setLines([...lines, { name: '', quantity: '', unit: 'kg', price: '' }])}>
