@@ -540,33 +540,17 @@ export function ItemsWorkspace({ items, save, refresh }: any) {
       ) : (
         <table style={{ marginTop: '8px' }}>
           <thead>
-            <tr><th>Item</th><th>Unit</th><th>Reorder Level</th><th>Stock Qty</th></tr>
+            <tr><th>Item</th><th>Stock</th></tr>
           </thead>
           <tbody>
             {items.map((item: any) => {
               const bal = storage.getStockBalance(item.id);
               const isLow = bal.quantity <= item.reorderLevel && item.reorderLevel > 0;
               return (
-                <tr key={item.id} onClick={() => { if (editingReorder !== item.id) setSelectedItem(item); }} style={{ cursor: 'pointer' }}>
+                <tr key={item.id} onClick={() => setSelectedItem(item)} style={{ cursor: 'pointer' }}>
                   <td><b style={{ color: 'var(--coffee)' }}>{item.name}</b></td>
-                  <td style={{ color: 'var(--muted)' }}>{item.baseUnit}</td>
-                  <td onClick={e => e.stopPropagation()}>
-                    {editingReorder === item.id ? (
-                      <input type="number" min="0" autoFocus value={reorderValue}
-                        onChange={e => setReorderValue(e.target.value)}
-                        onBlur={() => saveReorder(item.id)}
-                        onKeyDown={e => { if (e.key === 'Enter') saveReorder(item.id); if (e.key === 'Escape') setEditingReorder(null); }}
-                        style={{ width: '70px', border: '1px solid var(--line)', borderRadius: '5px', padding: '4px 8px', font: '13px DM Sans, sans-serif' }}
-                      />
-                    ) : (
-                      <span onClick={() => { setEditingReorder(item.id); setReorderValue(String(item.reorderLevel)); }}
-                        style={{ cursor: 'pointer', color: 'var(--muted)', borderBottom: '1px dashed var(--line)', paddingBottom: '1px' }} title="Click to edit">
-                        {item.reorderLevel}
-                      </span>
-                    )}
-                  </td>
                   <td style={{ fontWeight: 600, color: isLow ? '#bd4c3e' : 'var(--ink)' }}>
-                    {bal.quantity.toFixed(2)}{isLow ? ' ⚠' : ''}
+                    {bal.quantity.toFixed(2)} {item.baseUnit}{isLow ? ' ⚠' : ''}
                   </td>
                 </tr>
               );
