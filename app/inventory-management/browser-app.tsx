@@ -1,7 +1,8 @@
 'use client';
-import React, { FormEvent, useCallback, useEffect, useState } from 'react';
+import React, { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import type { DashboardData } from '@/lib/inventory/types';
 import * as storage from '@/lib/inventory/storage';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -361,22 +362,20 @@ export function Dashboard({ data, onNavigate, hasData }: { data: DashboardData; 
   );
 }
 
+const SUPPLIER_COLORS = ['#3a2013','#d9a541','#1d4ed8','#15803d','#7c3aed','#be185d','#0891b2'];
+
 export function ItemsWorkspace({ items, save, refresh }: any) {
   const [itemForm, setItemForm] = useState({ name: '', baseUnit: 'kg' });
   const [editingReorder, setEditingReorder] = useState<string | null>(null);
   const [reorderValue, setReorderValue] = useState('');
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [filterSupplier, setFilterSupplier] = useState('all');
+  const [dateRange, setDateRange] = useState<'7d'|'30d'|'90d'|'all'>('all');
 
   const handleAddItem = (e: FormEvent) => {
     e.preventDefault();
     if (!itemForm.name.trim()) return;
-    save(() => {
-      storage.addMaster('item', {
-        name: itemForm.name,
-        type: 'RAW_MATERIAL',
-        baseUnit: itemForm.baseUnit,
-        reorderLevel: 0
-      });
-    });
+    save(() => storage.addMaster('item', { name: itemForm.name, type: 'RAW_MATERIAL', baseUnit: itemForm.baseUnit, reorderLevel: 0 }));
     setItemForm({ name: '', baseUnit: 'kg' });
   };
 
@@ -387,6 +386,124 @@ export function ItemsWorkspace({ items, save, refresh }: any) {
     setEditingReorder(null);
   };
 
+  // --- Item Detail View ---
+  const priceHistory = useMemo(() => {
+    if (!selectedItem) return [];
+    return storage.getItemPriceHistory(selectedItem.id);
+  }, [selectedItem]);
+
+  const suppliers = useMemo(() => {
+    const names = new Map<string, string>();
+    priceHistory.forEach(r => names.set(r.supplierId, r.supplierName));
+    return Array.from(names.entries()).map(([id, name]) => ({ id, name }));
+  }, [priceHistory]);
+
+  const filteredHistory = useMemo(() => {
+    let rows = priceHistory;
+    if (filterSupplier !== 'all') rows = rows.filter(r => r.supplierId === filterSupplier);
+    if (dateRange !== 'all') {
+      const days = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90;
+      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days);
+      const cutStr = cutoff.toISOString().slice(0, 10);
+      rows = rows.filter(r => r.date >= cutStr);
+    }
+    return rows;
+  }, [priceHistory, filterSupplier, dateRange]);
+
+  const chartData = useMemo(() => {
+    const byDate: Record<string, any> = {};
+    for (const r of filteredHistory) {
+      if (!byDate[r.date]) byDate[r.date] = { date: r.date };
+      byDate[r.date][r.supplierName] = (r.unitPricePaise / 100).toFixed(2);
+    }
+    return Object.values(byDate).sort((a: any, b: any) => a.date.localeCompare(b.date));
+  }, [filteredHistory]);
+
+  if (selectedItem) {
+    const bal = storage.getStockBalance(selectedItem.id);
+    return (
+      <div className="im-form">
+        <button className="im-secondary" onClick={() => { setSelectedItem(null); setFilterSupplier('all'); setDateRange('all'); }} style={{ marginBottom: '24px' }}>← All Items</button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '10px', background: '#e5f0d6', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: '20px', color: 'var(--coffee)', flexShrink: 0 }}>
+            {selectedItem.name.slice(0, 1).toUpperCase()}
+          </div>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '24px', fontFamily: 'Playfair Display, serif' }}>{selectedItem.name}</h2>
+            <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--muted)' }}>{selectedItem.baseUnit} · Stock: <b>{bal.quantity.toFixed(2)}</b></p>
+          </div>
+        </div>
+
+        {priceHistory.length === 0 ? (
+          <div className="im-empty" style={{ textAlign: 'center', margin: '40px 0' }}>
+            <b>No purchase data yet</b>
+            <p>Price history will appear once this item has been purchased.</p>
+          </div>
+        ) : (
+          <>
+            {/* Filters */}
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '20px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '4px', background: '#f4f1ec', borderRadius: '8px', padding: '3px' }}>
+                {(['7d','30d','90d','all'] as const).map(r => (
+                  <button key={r} type="button" onClick={() => setDateRange(r)}
+                    style={{ background: dateRange === r ? 'var(--coffee)' : 'transparent', color: dateRange === r ? '#fff' : 'var(--muted)', border: 0, borderRadius: '6px', padding: '5px 12px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>
+                    {r === 'all' ? 'All time' : r}
+                  </button>
+                ))}
+              </div>
+              <select value={filterSupplier} onChange={e => setFilterSupplier(e.target.value)}
+                style={{ border: '1px solid var(--line)', borderRadius: '6px', padding: '6px 10px', fontSize: '12px', color: 'var(--ink)', background: '#fefdfb' }}>
+                <option value="all">All Suppliers</option>
+                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+
+            {/* Chart */}
+            {chartData.length > 0 ? (
+              <div style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: '12px', padding: '20px', marginBottom: '24px' }}>
+                <p className="im-kicker" style={{ marginBottom: '16px' }}>PRICE TREND (₹ per {selectedItem.baseUnit})</p>
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0e8d8" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#8f7662' }} />
+                    <YAxis tick={{ fontSize: 10, fill: '#8f7662' }} tickFormatter={v => `₹${v}`} />
+                    <Tooltip formatter={(v: any) => [`₹${v}`, '']} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e6d3bd' }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {(filterSupplier === 'all' ? suppliers : suppliers.filter(s => s.id === filterSupplier)).map((s, i) => (
+                      <Line key={s.id} type="monotone" dataKey={s.name} stroke={SUPPLIER_COLORS[i % SUPPLIER_COLORS.length]} strokeWidth={2} dot={{ r: 4 }} connectNulls />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="im-empty" style={{ textAlign: 'center', margin: '20px 0' }}>No data for selected filters</div>
+            )}
+
+            {/* Table */}
+            <p className="im-kicker">PURCHASE LOG</p>
+            <table style={{ width: '100%', marginTop: '8px', fontSize: '12px' }}>
+              <thead>
+                <tr><th>Date</th><th>Supplier</th><th>Qty</th><th>Rate per {selectedItem.baseUnit}</th></tr>
+              </thead>
+              <tbody>
+                {[...filteredHistory].reverse().map((r, i) => (
+                  <tr key={i}>
+                    <td>{r.date}</td>
+                    <td>{r.supplierName}</td>
+                    <td>{r.quantity} {selectedItem.baseUnit}</td>
+                    <td style={{ fontWeight: 600 }}>₹{(r.unitPricePaise / 100).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // --- Item List View ---
   return (
     <div className="im-form">
       {items.length === 0 ? (
@@ -394,39 +511,27 @@ export function ItemsWorkspace({ items, save, refresh }: any) {
       ) : (
         <table style={{ marginTop: '8px' }}>
           <thead>
-            <tr>
-              <th>Item</th>
-              <th>Unit</th>
-              <th>Reorder Level</th>
-              <th>Stock Qty</th>
-            </tr>
+            <tr><th>Item</th><th>Unit</th><th>Reorder Level</th><th>Stock Qty</th></tr>
           </thead>
           <tbody>
             {items.map((item: any) => {
               const bal = storage.getStockBalance(item.id);
               const isLow = bal.quantity <= item.reorderLevel && item.reorderLevel > 0;
               return (
-                <tr key={item.id}>
-                  <td><b>{item.name}</b></td>
+                <tr key={item.id} onClick={() => { if (editingReorder !== item.id) setSelectedItem(item); }} style={{ cursor: 'pointer' }}>
+                  <td><b style={{ color: 'var(--coffee)' }}>{item.name}</b></td>
                   <td style={{ color: 'var(--muted)' }}>{item.baseUnit}</td>
-                  <td>
+                  <td onClick={e => e.stopPropagation()}>
                     {editingReorder === item.id ? (
-                      <span style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                        <input
-                          type="number" min="0" autoFocus
-                          value={reorderValue}
-                          onChange={e => setReorderValue(e.target.value)}
-                          onBlur={() => saveReorder(item.id)}
-                          onKeyDown={e => { if (e.key === 'Enter') saveReorder(item.id); if (e.key === 'Escape') setEditingReorder(null); }}
-                          style={{ width: '70px', border: '1px solid var(--line)', borderRadius: '5px', padding: '4px 8px', font: '13px DM Sans, sans-serif' }}
-                        />
-                      </span>
+                      <input type="number" min="0" autoFocus value={reorderValue}
+                        onChange={e => setReorderValue(e.target.value)}
+                        onBlur={() => saveReorder(item.id)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveReorder(item.id); if (e.key === 'Escape') setEditingReorder(null); }}
+                        style={{ width: '70px', border: '1px solid var(--line)', borderRadius: '5px', padding: '4px 8px', font: '13px DM Sans, sans-serif' }}
+                      />
                     ) : (
-                      <span
-                        onClick={() => { setEditingReorder(item.id); setReorderValue(String(item.reorderLevel)); }}
-                        style={{ cursor: 'pointer', color: 'var(--muted)', borderBottom: '1px dashed var(--line)', paddingBottom: '1px' }}
-                        title="Click to edit"
-                      >
+                      <span onClick={() => { setEditingReorder(item.id); setReorderValue(String(item.reorderLevel)); }}
+                        style={{ cursor: 'pointer', color: 'var(--muted)', borderBottom: '1px dashed var(--line)', paddingBottom: '1px' }} title="Click to edit">
                         {item.reorderLevel}
                       </span>
                     )}

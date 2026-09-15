@@ -646,6 +646,26 @@ export function getPurchaseHistory() {
     .sort((a, b) => b.date.localeCompare(a.date));
 }
 
+export function getItemPriceHistory(itemId: string) {
+  const data = getData();
+  const master = getMasterData();
+  const supplierMap = new Map(master.suppliers.map(s => [s.id, s.name]));
+  const results: { date: string; supplierId: string; supplierName: string; unitPricePaise: number; quantity: number }[] = [];
+  for (const inv of data.purchaseInvoices) {
+    const lines = data.purchaseLines.filter(l => l.invoiceId === inv.id && l.itemId === itemId);
+    for (const line of lines) {
+      results.push({
+        date: inv.date,
+        supplierId: inv.supplierId,
+        supplierName: supplierMap.get(inv.supplierId) || 'Unknown',
+        unitPricePaise: Number(line.unitPricePaise),
+        quantity: Number(line.quantity)
+      });
+    }
+  }
+  return results.sort((a, b) => a.date.localeCompare(b.date));
+}
+
 // ============= Reports =============
 export function getStockReport() {
   const data = getData();
