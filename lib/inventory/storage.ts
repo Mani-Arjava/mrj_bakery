@@ -673,6 +673,35 @@ export function getItemPriceHistory(itemId: string) {
   return results.sort((a, b) => a.date.localeCompare(b.date));
 }
 
+export function getProductionByDate(date: string) {
+  const data = getData();
+  const master = getMasterData();
+  const itemMap = new Map(master.items.map(i => [i.id, i]));
+
+  return data.productionBatches
+    .filter(batch => batch.date === date)
+    .map(batch => {
+      const product = itemMap.get(batch.productId);
+      const consumption = data.productionConsumption
+        .filter(c => c.batchId === batch.id)
+        .map(c => ({
+          itemName: itemMap.get(c.itemId)?.name || c.itemId,
+          quantity: c.quantity,
+          unit: c.unit
+        }));
+      return {
+        id: batch.id,
+        date: batch.date,
+        productId: batch.productId,
+        productName: product?.name || 'Unknown',
+        quantityProduced: batch.quantityProduced,
+        consumption,
+        note: batch.note || ''
+      };
+    })
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
 // ============= Reports =============
 export function getStockReport() {
   const data = getData();

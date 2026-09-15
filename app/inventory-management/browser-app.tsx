@@ -1077,16 +1077,20 @@ export function ProductsWorkspace({ products, save, refresh }: any) {
       ) : (
         <table style={{ marginTop: '8px', width: '100%' }}>
           <thead>
-            <tr><th>Product</th><th>Unit</th><th>Price per unit</th></tr>
+            <tr><th>Product</th><th>Unit</th><th>Count</th><th>Price per unit</th></tr>
           </thead>
           <tbody>
-            {products.map((p: any) => (
-              <tr key={p.id} onClick={() => openEdit(p)} style={{ cursor: 'pointer' }}>
-                <td><b style={{ color: 'var(--coffee)' }}>{p.name}</b></td>
-                <td style={{ color: 'var(--muted)' }}>{p.baseUnit}</td>
-                <td>₹{(p.pricePerUnitPaise / 100).toFixed(2)}</td>
-              </tr>
-            ))}
+            {products.map((p: any) => {
+              const balance = storage.getStockBalance(p.id);
+              return (
+                <tr key={p.id} onClick={() => openEdit(p)} style={{ cursor: 'pointer' }}>
+                  <td><b style={{ color: 'var(--coffee)' }}>{p.name}</b></td>
+                  <td style={{ color: 'var(--muted)' }}>{p.baseUnit}</td>
+                  <td style={{ fontWeight: 600 }}>{Math.round(balance.quantity)}</td>
+                  <td>₹{((p.pricePerUnitPaise || 0) / 100).toFixed(2)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -1138,6 +1142,7 @@ export function ProductionWorkspace({ products, materials, save, refresh }: any)
     );
   }
 
+  const [selectedDate, setSelectedDate] = useState(today());
   const [selectedProduct, setSelectedProduct] = useState('');
   const [quantity, setQuantity] = useState('');
   const [consumedLines, setConsumedLines] = useState<Array<{ materialId: string; qty: string }>>([{ materialId: '', qty: '' }]);
@@ -1145,6 +1150,7 @@ export function ProductionWorkspace({ products, materials, save, refresh }: any)
   const [note, setNote] = useState('');
 
   const selectedItem = products.find((p: any) => p.id === selectedProduct);
+  const productionHistory = storage.getProductionByDate(selectedDate);
 
   function validateStock() {
     const newErrors: string[] = [];
@@ -1196,6 +1202,11 @@ export function ProductionWorkspace({ products, materials, save, refresh }: any)
     <div className="im-form">
       <p className="im-kicker">PRODUCTION</p>
       <h2>Record production</h2>
+
+      <label style={{ marginBottom: '24px' }}>
+        View productions for date
+        <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
+      </label>
 
       <form onSubmit={handleSubmit}>
         <label>
@@ -1252,6 +1263,30 @@ export function ProductionWorkspace({ products, materials, save, refresh }: any)
           </>
         )}
       </form>
+
+      {productionHistory.length > 0 && (
+        <>
+          <p className="im-kicker" style={{ marginTop: '32px' }}>PRODUCTION HISTORY FOR {selectedDate}</p>
+          <table style={{ width: '100%', marginTop: '8px', fontSize: '13px' }}>
+            <thead>
+              <tr><th>Product</th><th>Qty Produced</th><th>Materials Used</th></tr>
+            </thead>
+            <tbody>
+              {productionHistory.map((prod: any) => (
+                <tr key={prod.id}>
+                  <td><b style={{ color: 'var(--coffee)' }}>{prod.productName}</b></td>
+                  <td>{prod.quantityProduced.toFixed(2)}</td>
+                  <td style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                    {prod.consumption.map((c: any, i: number) => (
+                      <div key={i}>{c.itemName}: {c.quantity.toFixed(2)} {c.unit}</div>
+                    ))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
     </div>
   );
 }
