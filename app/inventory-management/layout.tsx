@@ -106,6 +106,7 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
   const viewMap: { [key: string]: string } = {
     '/inventory-management': 'Dashboard',
     '/inventory-management/items': 'Items',
+    '/inventory-management/suppliers': 'Suppliers',
     '/inventory-management/purchases': 'Purchases',
     '/inventory-management/customers': 'Customers',
     '/inventory-management/production': 'Production',
@@ -131,24 +132,30 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
 
         <button className={isActive('/inventory-management') ? 'active' : ''} onClick={() => router.push('/inventory-management')}>Dashboard</button>
 
-        <span className="im-side-label">SETUP</span>
-        <button className={isActive('/inventory-management/items') ? 'active' : ''} onClick={() => router.push('/inventory-management/items')}>Items</button>
+        <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '12px 0' }}></div>
 
-        <span className="im-side-label">OPERATIONS</span>
+        <button className={isActive('/inventory-management/items') ? 'active' : ''} onClick={() => router.push('/inventory-management/items')}>Items</button>
+        <button className={isActive('/inventory-management/suppliers') ? 'active' : ''} onClick={() => router.push('/inventory-management/suppliers')}>Suppliers</button>
+
+        <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '12px 0' }}></div>
+
         <button className={isActive('/inventory-management/purchases') ? 'active' : ''} onClick={() => router.push('/inventory-management/purchases')}>Purchases</button>
         <button className={isActive('/inventory-management/customers') ? 'active' : ''} onClick={() => router.push('/inventory-management/customers')}>Customers</button>
         <button className={isActive('/inventory-management/production') ? 'active' : ''} onClick={() => router.push('/inventory-management/production')}>Production</button>
         <button className={isActive('/inventory-management/expenses') ? 'active' : ''} onClick={() => router.push('/inventory-management/expenses')}>Expenses</button>
 
-        <span className="im-side-label">PRODUCTION</span>
+        <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '12px 0' }}></div>
+
         <button className={isActive('/inventory-management/recipes') ? 'active' : ''} onClick={() => router.push('/inventory-management/recipes')}>Recipes</button>
 
-        <span className="im-side-label">ACCOUNTS</span>
+        <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '12px 0' }}></div>
+
         <button className={isActive('/inventory-management/supplier-ledger') ? 'active' : ''} onClick={() => router.push('/inventory-management/supplier-ledger')}>Supplier Ledger</button>
         <button className={isActive('/inventory-management/customer-ledger') ? 'active' : ''} onClick={() => router.push('/inventory-management/customer-ledger')}>Customer Ledger</button>
         <button className={isActive('/inventory-management/daily-closing') ? 'active' : ''} onClick={() => router.push('/inventory-management/daily-closing')}>Daily Closing</button>
 
-        <span className="im-side-label">INSIGHTS</span>
+        <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '12px 0' }}></div>
+
         <button className={isActive('/inventory-management/reports') ? 'active' : ''} onClick={() => router.push('/inventory-management/reports')}>Reports</button>
         <button className={isActive('/inventory-management/settings') ? 'active' : ''} onClick={() => router.push('/inventory-management/settings')}>Settings</button>
 

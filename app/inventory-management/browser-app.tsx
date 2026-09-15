@@ -362,19 +362,9 @@ export function Dashboard({ data, onNavigate, hasData }: { data: DashboardData; 
 }
 
 export function ItemsWorkspace({ items, suppliers, customers, save, refresh }: any) {
-  const [tab, setTab] = useState<'suppliers' | 'customers' | 'items'>('suppliers');
-  const [supplierForm, setSupplierForm] = useState({ name: '', phone: '', contactPerson: '', address: '' });
+  const [tab, setTab] = useState<'customers' | 'items'>('items');
   const [customerForm, setCustomerForm] = useState({ name: '', phone: '', contactPerson: '', address: '' });
   const [itemForm, setItemForm] = useState({ name: '', type: 'RAW_MATERIAL' as 'RAW_MATERIAL' | 'FINISHED_GOOD', baseUnit: 'kg', reorderLevel: '0' });
-
-  const handleAddSupplier = (e: FormEvent) => {
-    e.preventDefault();
-    if (!supplierForm.name.trim()) return;
-    save(() => {
-      storage.addMaster('supplier', supplierForm);
-    });
-    setSupplierForm({ name: '', phone: '', contactPerson: '', address: '' });
-  };
 
   const handleAddCustomer = (e: FormEvent) => {
     e.preventDefault();
@@ -402,43 +392,9 @@ export function ItemsWorkspace({ items, suppliers, customers, save, refresh }: a
   return (
     <div className="im-form">
       <div className="im-tabs">
-        <button className={tab === 'suppliers' ? 'selected' : ''} onClick={() => setTab('suppliers')}>Suppliers</button>
         <button className={tab === 'customers' ? 'selected' : ''} onClick={() => setTab('customers')}>Customers</button>
         <button className={tab === 'items' ? 'selected' : ''} onClick={() => setTab('items')}>Items</button>
       </div>
-
-      {tab === 'suppliers' && (
-        <>
-          <p className="im-kicker">SUPPLIER DIRECTORY</p>
-          <h2>Manage suppliers</h2>
-          {suppliers.length === 0 ? (
-            <div className="im-empty"><b>No suppliers yet</b><p>Create your first supplier below.</p></div>
-          ) : (
-            <div className="im-party-cards" style={{ marginTop: '24px' }}>
-              {suppliers.map((s: any) => (
-                <div className="im-party-card" key={s.id} style={{ cursor: 'default', backgroundColor: '#f9faf7' }}>
-                  <span>{s.name.slice(0, 1).toUpperCase()}</span>
-                  <b>{s.name}</b>
-                  {s.phone && <small>{s.phone}</small>}
-                  {s.contactPerson && <small>{s.contactPerson}</small>}
-                  {s.address && <small>{s.address}</small>}
-                </div>
-              ))}
-            </div>
-          )}
-          <form onSubmit={handleAddSupplier} style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--line)' }}>
-            <p className="im-kicker">ADD SUPPLIER</p>
-            <label>Name<input value={supplierForm.name} onChange={e => setSupplierForm({ ...supplierForm, name: e.target.value })} required /></label>
-            <div className="im-three">
-              <label>Phone<input value={supplierForm.phone} onChange={e => setSupplierForm({ ...supplierForm, phone: e.target.value })} inputMode="tel" /></label>
-              <label>Contact Person<input value={supplierForm.contactPerson} onChange={e => setSupplierForm({ ...supplierForm, contactPerson: e.target.value })} /></label>
-              <label></label>
-            </div>
-            <label>Address<textarea value={supplierForm.address} onChange={e => setSupplierForm({ ...supplierForm, address: e.target.value })} rows={2} /></label>
-            <button>Add Supplier →</button>
-          </form>
-        </>
-      )}
 
       {tab === 'customers' && (
         <>
@@ -528,16 +484,34 @@ export function ItemsWorkspace({ items, suppliers, customers, save, refresh }: a
 }
 
 export function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
+  type Stage = 'history' | 'select-supplier' | 'bill';
+  const [stage, setStage] = useState<Stage>('history');
   const [selectedSupplier, setSelectedSupplier] = useState<any>(null);
   const [lines, setLines] = useState([{ name: '', quantity: '', unit: 'kg', price: '' }]);
   const [paid, setPaid] = useState('0');
-  const [addingSupplier, setAddingSupplier] = useState(false);
-  const [supplierForm, setSupplierForm] = useState({ name: '', phone: '', contactPerson: '', address: '' });
   const [date, setDate] = useState(today());
   const [expandedBillId, setExpandedBillId] = useState<string | null>(null);
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [supplierForm, setSupplierForm] = useState({ name: '', phone: '', contactPerson: '', address: '' });
+  const [supplierSearch, setSupplierSearch] = useState('');
 
   const total = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.price || 0), 0);
   const purchaseHistory = storage.getPurchaseHistory();
+  const filteredSuppliers = suppliers.filter((s: any) => s.name.toLowerCase().includes(supplierSearch.toLowerCase()));
+
+  const handleAddSupplier = (e: FormEvent) => {
+    e.preventDefault();
+    if (!supplierForm.name.trim()) return;
+    save(() => {
+      const id = storage.addMaster('supplier', supplierForm);
+      const newSupplier = { id, ...supplierForm };
+      setSelectedSupplier(newSupplier);
+      setSupplierForm({ name: '', phone: '', contactPerson: '', address: '' });
+      setShowSupplierModal(false);
+      setStage('bill');
+      refresh();
+    });
+  };
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -580,204 +554,189 @@ export function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
 
     setLines([{ name: '', quantity: '', unit: 'kg', price: '' }]);
     setPaid('0');
+    setSelectedSupplier(null);
+    setStage('history');
   }
 
-  const handleAddSupplier = (e: FormEvent) => {
-    e.preventDefault();
-    if (!supplierForm.name.trim()) return;
-    const id = storage.addMaster('supplier', supplierForm);
-    const newSupplier = { id, ...supplierForm };
-    setSelectedSupplier(newSupplier);
-    setSupplierForm({ name: '', phone: '', contactPerson: '', address: '' });
-    setAddingSupplier(false);
-    refresh();
-  };
+  if (stage === 'history') {
+    return (
+      <div className="im-form">
+        <div style={{ marginBottom: '24px' }}>
+          <button className="im-primary" onClick={() => { setStage('select-supplier'); setSupplierSearch(''); }}>New Purchase →</button>
+        </div>
+
+        {purchaseHistory.length === 0 ? (
+          <div className="im-empty" style={{ margin: '40px 0', textAlign: 'center' }}>
+            <b>No purchases yet</b>
+            <p>Click "New Purchase" above to create your first one</p>
+          </div>
+        ) : (
+          <div>
+            <p className="im-kicker">PURCHASE HISTORY</p>
+            <h2>All purchases</h2>
+            <table style={{ width: '100%', marginTop: '12px', fontSize: '12px' }}>
+              <thead>
+                <tr>
+                  <th>Date</th><th>Supplier</th><th>Items</th><th>Total</th><th>Paid</th><th>Pending</th>
+                </tr>
+              </thead>
+              <tbody>
+                {purchaseHistory.map(bill => (
+                  <React.Fragment key={bill.id}>
+                    <tr onClick={() => setExpandedBillId(expandedBillId === bill.id ? null : bill.id)} style={{ cursor: 'pointer', backgroundColor: expandedBillId === bill.id ? '#f9faf7' : 'transparent' }}>
+                      <td>{bill.date}</td><td>{bill.supplierName}</td><td>{bill.lineCount} item(s)</td>
+                      <td>{money(bill.billAmountPaise)}</td><td>{money(bill.paidAmountPaise)}</td>
+                      <td style={{ fontWeight: 700, color: bill.pendingPaise > 0 ? '#bd4c3e' : '#79c998' }}>{money(bill.pendingPaise)}</td>
+                    </tr>
+                    {expandedBillId === bill.id && (
+                      <tr style={{ backgroundColor: '#f9faf7' }}>
+                        <td colSpan={6} style={{ padding: '12px', fontSize: '11px' }}>
+                          {bill.lines.map((line, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: idx > 0 ? '1px solid #edf0eb' : 'none' }}>
+                              <span><b>{line.itemName}</b> {line.quantity} {line.unit}</span>
+                              <span>{money(line.totalPaise)}</span>
+                            </div>
+                          ))}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (stage === 'select-supplier') {
+    return (
+      <div className="im-form">
+        <button type="button" onClick={() => setStage('history')} className="im-secondary" style={{ marginBottom: '24px' }}>← Cancel</button>
+        <h2>Select Supplier</h2>
+
+        {suppliers.length > 0 && (
+          <input
+            type="text"
+            placeholder="Search suppliers..."
+            value={supplierSearch}
+            onChange={(e) => setSupplierSearch(e.target.value)}
+            style={{ width: '100%', marginBottom: '16px', border: '1px solid var(--line)', borderRadius: '6px', padding: '10px', fontSize: '13px' }}
+          />
+        )}
+
+        {suppliers.length === 0 ? (
+          <div className="im-empty" style={{ margin: '40px 0', textAlign: 'center' }}>
+            <b>No suppliers yet</b>
+            <p>Create one to start recording purchases</p>
+          </div>
+        ) : filteredSuppliers.length === 0 ? (
+          <div className="im-empty" style={{ margin: '40px 0', textAlign: 'center' }}>
+            <b>No suppliers found</b>
+            <p>Try a different search</p>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: '8px', marginBottom: '24px' }}>
+            {filteredSuppliers.map((s: any) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => { setSelectedSupplier(s); setStage('bill'); }}
+                style={{
+                  textAlign: 'left',
+                  background: '#fff',
+                  border: '1px solid var(--line)',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}
+              >
+                <span style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#e5f0d6', display: 'grid', placeItems: 'center', fontWeight: 700, color: '#143d32' }}>
+                  {s.name.slice(0, 1).toUpperCase()}
+                </span>
+                <div>
+                  <div style={{ fontWeight: 700 }}>{s.name}</div>
+                  {s.phone && <div style={{ fontSize: '12px', color: 'var(--muted)' }}>{s.phone}</div>}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="im-primary"
+          onClick={() => setShowSupplierModal(true)}
+          style={{ width: '100%' }}
+        >
+          + Add Supplier
+        </button>
+
+        {showSupplierModal && (
+          <div className="im-modal-backdrop">
+            <div className="im-modal">
+              <button className="im-modal-close" onClick={() => setShowSupplierModal(false)}>×</button>
+              <h2>Add Supplier</h2>
+              <form className="im-modal-form" onSubmit={handleAddSupplier}>
+                <label>Name<input type="text" placeholder="Supplier name" value={supplierForm.name} onChange={(e) => setSupplierForm({ ...supplierForm, name: e.target.value })} required autoFocus /></label>
+                <label>Phone<input type="tel" placeholder="Phone" value={supplierForm.phone} onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })} /></label>
+                <label>Contact Person<input type="text" placeholder="Contact person" value={supplierForm.contactPerson} onChange={(e) => setSupplierForm({ ...supplierForm, contactPerson: e.target.value })} /></label>
+                <label>Address<textarea placeholder="Address" value={supplierForm.address} onChange={(e) => setSupplierForm({ ...supplierForm, address: e.target.value })}></textarea></label>
+                <button type="submit" className="im-primary" style={{ marginTop: '16px' }}>Create Supplier</button>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="im-form">
+      <div style={{ background: '#e7f0d7', border: '1px solid #d2e6ac', borderRadius: '12px', padding: '12px 16px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontWeight: 700 }}>● {selectedSupplier.name}</span>
+        <button type="button" onClick={() => setStage('select-supplier')} className="im-secondary">Change</button>
+      </div>
+
       <div className="im-date-strip" style={{ marginBottom: '24px' }}>
         <button onClick={() => { const d = new Date(date); d.setDate(d.getDate() - 1); setDate(d.toISOString().slice(0, 10)); }}>← Previous</button>
         <label><span>Date</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
         <button onClick={() => { const d = new Date(date); d.setDate(d.getDate() + 1); setDate(d.toISOString().slice(0, 10)); }}>Next →</button>
       </div>
 
-      {!selectedSupplier && !addingSupplier && (
-        <>
-          <p className="im-kicker">SUPPLIER</p>
-          <h2>Select supplier</h2>
-          {suppliers.length === 0 ? (
-            <div className="im-empty" style={{ margin: '40px 0' }}>
-              <b>No suppliers yet</b>
-              <p>Create your first supplier to start recording purchases.</p>
-            </div>
-          ) : (
-            <div className="im-party-cards" style={{ marginTop: '24px' }}>
-              {suppliers.map((s: any) => (
-                <button
-                  key={s.id}
-                  className="im-party-card"
-                  onClick={() => setSelectedSupplier(s)}
-                  style={{ cursor: 'pointer', background: '#fff' }}
-                >
-                  <span>{s.name.slice(0, 1).toUpperCase()}</span>
-                  <b>{s.name}</b>
-                  {s.phone && <small>{s.phone}</small>}
-                  {s.contactPerson && <small>{s.contactPerson}</small>}
-                </button>
-              ))}
-              <button
-                className="im-party-card"
-                onClick={() => setAddingSupplier(true)}
-                style={{ cursor: 'pointer', background: '#f9faf7', color: '#718078', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <span style={{ fontSize: '24px' }}>➕</span>
-              </button>
-            </div>
-          )}
-          {suppliers.length === 0 && (
-            <button onClick={() => setAddingSupplier(true)} style={{ marginTop: '20px', background: '#143d32', color: '#fff', border: 0, borderRadius: '7px', padding: '12px 16px', fontWeight: 700, cursor: 'pointer' }}>
-              Add your first supplier →
-            </button>
-          )}
-        </>
-      )}
+      <h2>Record purchase</h2>
 
-      {addingSupplier && (
-        <form onSubmit={handleAddSupplier} style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--line)' }}>
-          <p className="im-kicker">NEW SUPPLIER</p>
-          <h2 style={{ fontSize: '24px' }}>Create supplier</h2>
-          <label>Name<input value={supplierForm.name} onChange={e => setSupplierForm({ ...supplierForm, name: e.target.value })} required autoFocus /></label>
-          <div className="im-three">
-            <label>Phone<input value={supplierForm.phone} onChange={e => setSupplierForm({ ...supplierForm, phone: e.target.value })} inputMode="tel" /></label>
-            <label>Contact Person<input value={supplierForm.contactPerson} onChange={e => setSupplierForm({ ...supplierForm, contactPerson: e.target.value })} /></label>
-            <label></label>
-          </div>
-          <label>Address<textarea value={supplierForm.address} onChange={e => setSupplierForm({ ...supplierForm, address: e.target.value })} rows={2} /></label>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button>Save & Continue →</button>
-            <button type="button" onClick={() => setAddingSupplier(false)} className="im-secondary">Cancel</button>
-          </div>
-        </form>
-      )}
+      <div className="im-line-head">
+        <span>Item</span><span>Qty</span><span>Unit</span><span>Rate ₹</span><span>Total</span>
+      </div>
 
-      {selectedSupplier && (
-        <>
-          <div style={{ background: '#e7f0d7', border: '1px solid #d2e6ac', borderRadius: '12px', padding: '18px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <p className="im-kicker">SELECTED SUPPLIER</p>
-              <h3 style={{ margin: 0, fontSize: '20px' }}>{selectedSupplier.name}</h3>
-            </div>
-            <button type="button" onClick={() => setSelectedSupplier(null)} className="im-secondary">← Change supplier</button>
-          </div>
-
-          <p className="im-kicker">PURCHASE BILL</p>
-          <h2>Record purchase</h2>
-
-          <div className="im-line-head">
-            <span>Item</span><span>Qty</span><span>Unit</span><span>Rate ₹</span><span>Total</span>
-          </div>
-
-          {lines.map((line, idx) => (
-            <div className="im-purchase-line" key={idx}>
-              <input
-                list="raw-items"
-                value={line.name}
-                onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, name: e.target.value } : l))}
-                placeholder="Item name"
-                required
-              />
-              <input
-                value={line.quantity}
-                onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: e.target.value } : l))}
-                type="number"
-                min="0.01"
-                step="0.01"
-                required
-              />
-              <select value={line.unit} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, unit: e.target.value } : l))}>
-                <option>kg</option><option>litre</option><option>piece</option>
-              </select>
-              <input
-                value={line.price}
-                onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, price: e.target.value } : l))}
-                type="number"
-                min="0"
-                step="0.01"
-                required
-              />
-              <b>{money(Math.round(Number(line.quantity || 0) * Number(line.price || 0) * 100))}</b>
-              {lines.length > 1 && (
-                <button
-                  type="button"
-                  className="im-remove"
-                  onClick={() => setLines(lines.filter((_, i) => i !== idx))}
-                >×</button>
-              )}
-            </div>
-          ))}
-          <datalist id="raw-items">
-            {items.map((item: typeof items[0]) => <option value={item.name} key={item.id} />)}
-          </datalist>
-
-          <button type="button" className="im-text-button" onClick={() => setLines([...lines, { name: '', quantity: '', unit: 'kg', price: '' }])}>
-            + Add line
-          </button>
-
-          <div className="im-bill-total">
-            <label>
-              Paid now (₹)
-              <input value={paid} onChange={e => setPaid(e.target.value)} type="number" min="0" step="0.01" />
-            </label>
-            <strong>Total: {money(Math.round(total * 100))}</strong>
-            <button onClick={submit}>Post Bill →</button>
-          </div>
-        </>
-      )}
-
-      {purchaseHistory.length > 0 && (
-        <div style={{ marginTop: '48px', paddingTop: '24px', borderTop: '2px solid var(--line)' }}>
-          <p className="im-kicker">PURCHASE HISTORY</p>
-          <h3>All purchases</h3>
-          <table style={{ width: '100%', marginTop: '12px', fontSize: '12px' }}>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Supplier</th>
-                <th>Items</th>
-                <th>Total</th>
-                <th>Paid</th>
-                <th>Pending</th>
-              </tr>
-            </thead>
-            <tbody>
-              {purchaseHistory.map(bill => (
-                <React.Fragment key={bill.id}>
-                  <tr onClick={() => setExpandedBillId(expandedBillId === bill.id ? null : bill.id)} style={{ cursor: 'pointer', backgroundColor: expandedBillId === bill.id ? '#f9faf7' : 'transparent' }}>
-                    <td>{bill.date}</td>
-                    <td>{bill.supplierName}</td>
-                    <td>{bill.lineCount} item(s)</td>
-                    <td>{money(bill.billAmountPaise)}</td>
-                    <td>{money(bill.paidAmountPaise)}</td>
-                    <td style={{ fontWeight: 700, color: bill.pendingPaise > 0 ? '#bd4c3e' : '#79c998' }}>{money(bill.pendingPaise)}</td>
-                  </tr>
-                  {expandedBillId === bill.id && (
-                    <tr style={{ backgroundColor: '#f9faf7' }}>
-                      <td colSpan={6} style={{ padding: '12px', fontSize: '11px' }}>
-                        {bill.lines.map((line, idx) => (
-                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: idx > 0 ? '1px solid #edf0eb' : 'none' }}>
-                            <span><b>{line.itemName}</b> {line.quantity} {line.unit}</span>
-                            <span>{money(line.totalPaise)}</span>
-                          </div>
-                        ))}
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
+      {lines.map((line, idx) => (
+        <div className="im-purchase-line" key={idx}>
+          <input list="raw-items" value={line.name} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, name: e.target.value } : l))} placeholder="Item name" required />
+          <input value={line.quantity} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: e.target.value } : l))} type="number" min="0.01" step="0.01" required />
+          <select value={line.unit} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, unit: e.target.value } : l))}>
+            <option>kg</option><option>litre</option><option>piece</option>
+          </select>
+          <input value={line.price} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, price: e.target.value } : l))} type="number" min="0" step="0.01" required />
+          <b>{money(Math.round(Number(line.quantity || 0) * Number(line.price || 0) * 100))}</b>
+          {lines.length > 1 && (<button type="button" className="im-remove" onClick={() => setLines(lines.filter((_, i) => i !== idx))}>×</button>)}
         </div>
-      )}
+      ))}
+      <datalist id="raw-items">
+        {items.map((item: typeof items[0]) => <option value={item.name} key={item.id} />)}
+      </datalist>
+
+      <button type="button" className="im-text-button" onClick={() => setLines([...lines, { name: '', quantity: '', unit: 'kg', price: '' }])}>+ Add line</button>
+
+      <div className="im-bill-total">
+        <label>Paid now (₹)<input value={paid} onChange={e => setPaid(e.target.value)} type="number" min="0" step="0.01" /></label>
+        <strong>Total: {money(Math.round(total * 100))}</strong>
+        <button onClick={submit}>Post Bill →</button>
+      </div>
     </div>
   );
 }
@@ -1831,6 +1790,76 @@ export function SettingsWorkspace({ onLogout }: { onLogout: () => void }) {
           🚪 Sign out
         </button>
       </div>
+    </div>
+  );
+}
+
+export function SuppliersWorkspace({ suppliers, save, refresh }: { suppliers: any[]; save: (action: () => void) => Promise<void>; refresh: () => void }) {
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ name: '', phone: '', contactPerson: '', address: '' });
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    save(() => {
+      storage.addMaster('supplier', form);
+      setForm({ name: '', phone: '', contactPerson: '', address: '' });
+      setShowModal(false);
+    });
+  };
+
+  return (
+    <div className="im-form">
+      <div className="im-section-actions">
+        <h2 className="im-page-title">Suppliers</h2>
+        <button className="im-primary" onClick={() => setShowModal(true)}>Add Supplier</button>
+      </div>
+
+      {suppliers.length === 0 ? (
+        <div className="im-empty" style={{ margin: '40px 0', textAlign: 'center' }}>
+          <b>No suppliers yet</b>
+          <p>Click "Add Supplier" above to create your first one</p>
+        </div>
+      ) : (
+        <div className="im-party-grid" style={{ marginTop: '24px' }}>
+          {suppliers.map((s: any) => (
+            <div key={s.id} className="im-party-card" style={{ cursor: 'default', background: '#f9faf7' }}>
+              <span>{s.name.slice(0, 1).toUpperCase()}</span>
+              <b>{s.name}</b>
+              {s.phone && <small>{s.phone}</small>}
+              {s.contactPerson && <small>{s.contactPerson}</small>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showModal && (
+        <div className="im-modal-backdrop">
+          <div className="im-modal">
+            <button className="im-modal-close" onClick={() => setShowModal(false)}>×</button>
+            <h2>Add Supplier</h2>
+            <form className="im-modal-form" onSubmit={handleSubmit}>
+              <label>
+                Name
+                <input type="text" placeholder="Supplier name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              </label>
+              <label>
+                Phone
+                <input type="tel" placeholder="Phone number" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              </label>
+              <label>
+                Contact Person
+                <input type="text" placeholder="Contact person name" value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} />
+              </label>
+              <label>
+                Address
+                <textarea placeholder="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })}></textarea>
+              </label>
+              <button type="submit" className="im-primary" style={{ marginTop: '16px' }}>Create Supplier</button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
