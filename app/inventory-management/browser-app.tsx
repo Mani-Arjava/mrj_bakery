@@ -559,52 +559,84 @@ export function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
         </div>
       ) : (
         <div style={{ display: 'grid', gap: '24px' }}>
-          {dates.map(d => {
-            const bills = byDate[d];
-            const dayTotal = bills.reduce((s, b) => s + b.billAmountPaise, 0);
-            const dayPending = bills.reduce((s, b) => s + b.pendingPaise, 0);
-            return (
-              <div key={d}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '2px solid var(--line)', paddingBottom: '8px', marginBottom: '4px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-                    {new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-                  </span>
-                  <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                    {money(dayTotal)}{dayPending > 0 ? ` · ₹${(dayPending / 100).toFixed(0)} due` : dayPending < 0 ? ` · ₹${Math.abs(dayPending / 100).toFixed(0)} credit` : ' · Settled'}
-                  </span>
+          {(() => {
+            // Final net balance per supplier across ALL bills (not running — same value on every row)
+            const supplierNetBalance: Record<string, number> = {};
+            const supplierBillCount: Record<string, number> = {};
+            const supplierBillIndex: Record<string, number> = {};
+            for (const bill of [...purchaseHistory].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))) {
+              supplierNetBalance[bill.supplierId] = (supplierNetBalance[bill.supplierId] || 0) + bill.pendingPaise;
+              supplierBillCount[bill.supplierId] = (supplierBillCount[bill.supplierId] || 0) + 1;
+            }
+            // Assign sequential bill numbers per supplier in chronological order
+            const billIndex: Record<string, number> = {};
+            const tempCount: Record<string, number> = {};
+            for (const bill of [...purchaseHistory].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))) {
+              tempCount[bill.supplierId] = (tempCount[bill.supplierId] || 0) + 1;
+              billIndex[bill.id] = tempCount[bill.supplierId];
+            }
+            return dates.map(d => {
+              const bills = byDate[d];
+              const dayTotal = bills.reduce((s, b) => s + b.billAmountPaise, 0);
+              const dayPending = bills.reduce((s, b) => s + b.pendingPaise, 0);
+              return (
+                <div key={d}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '2px solid var(--line)', paddingBottom: '8px', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+                      {new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                    </span>
+                    <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                      {money(dayTotal)}{dayPending > 0 ? ` · ₹${(dayPending / 100).toFixed(0)} due` : dayPending < 0 ? ` · ₹${Math.abs(dayPending / 100).toFixed(0)} credit` : ' · Settled'}
+                    </span>
+                  </div>
+                  <table style={{ width: '100%', fontSize: '12px' }}>
+                    <tbody>
+                      {bills.map(bill => {
+                        const netBal = supplierNetBalance[bill.supplierId] ?? 0;
+                        const idx = billIndex[bill.id] ?? 1;
+                        const total = supplierBillCount[bill.supplierId] ?? 1;
+                        return (
+                          <React.Fragment key={bill.id}>
+                            <tr onClick={() => setExpandedBillId(expandedBillId === bill.id ? null : bill.id)} style={{ cursor: 'pointer', background: expandedBillId === bill.id ? '#f9faf7' : 'transparent' }}>
+                              <td style={{ paddingLeft: '4px' }}>
+                                <b>{bill.supplierName}</b>
+                                <br /><span style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: 400 }}>Bill {idx} of {total}</span>
+                              </td>
+                              <td style={{ color: 'var(--muted)' }}>{bill.lineCount} item(s)</td>
+                              <td>{money(bill.billAmountPaise)}</td>
+                              <td>{money(bill.paidAmountPaise)} paid</td>
+                              <td style={{ fontWeight: 700, color: bill.pendingPaise > 0 ? '#bd4c3e' : '#1a8754' }}>
+                                {bill.pendingPaise > 0 ? `${money(bill.pendingPaise)} due` : '✓ Settled'}
+                              </td>
+                              <td style={{ fontWeight: 700, fontSize: '11px', color: netBal > 0 ? '#bd4c3e' : netBal < 0 ? '#1d4ed8' : '#1a8754', textAlign: 'right', paddingRight: '4px' }}>
+                                {netBal > 0
+                                  ? `Net: ${money(netBal)} due`
+                                  : netBal < 0
+                                    ? `Net: ${money(Math.abs(netBal))} credit`
+                                    : 'Net: ✓ Clear'}
+                              </td>
+                            </tr>
+                            {expandedBillId === bill.id && (
+                              <tr style={{ background: '#f9faf7' }}>
+                                <td colSpan={6} style={{ padding: '10px 12px', fontSize: '11px' }}>
+                                  {bill.lines.map((line, i) => (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: i > 0 ? '1px solid #edf0eb' : 'none' }}>
+                                      <span><b>{line.itemName}</b> · {line.quantity} {line.unit}</span>
+                                      <span>{money(line.totalPaise)}</span>
+                                    </div>
+                                  ))}
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                <table style={{ width: '100%', fontSize: '12px' }}>
-                  <tbody>
-                    {bills.map(bill => (
-                      <React.Fragment key={bill.id}>
-                        <tr onClick={() => setExpandedBillId(expandedBillId === bill.id ? null : bill.id)} style={{ cursor: 'pointer', background: expandedBillId === bill.id ? '#f9faf7' : 'transparent' }}>
-                          <td style={{ paddingLeft: '4px' }}><b>{bill.supplierName}</b></td>
-                          <td style={{ color: 'var(--muted)' }}>{bill.lineCount} item(s)</td>
-                          <td>{money(bill.billAmountPaise)}</td>
-                          <td>{money(bill.paidAmountPaise)} paid</td>
-                          <td style={{ fontWeight: 700, color: bill.pendingPaise > 0 ? '#bd4c3e' : '#1a8754' }}>
-                            {bill.pendingPaise > 0 ? `${money(bill.pendingPaise)} due` : '✓ Settled'}
-                          </td>
-                        </tr>
-                        {expandedBillId === bill.id && (
-                          <tr style={{ background: '#f9faf7' }}>
-                            <td colSpan={5} style={{ padding: '10px 12px', fontSize: '11px' }}>
-                              {bill.lines.map((line, idx) => (
-                                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: idx > 0 ? '1px solid #edf0eb' : 'none' }}>
-                                  <span><b>{line.itemName}</b> · {line.quantity} {line.unit}</span>
-                                  <span>{money(line.totalPaise)}</span>
-                                </div>
-                              ))}
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
-          })}
+              );
+            });
+          })()}
         </div>
       )}
 
@@ -641,15 +673,19 @@ export function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
               {supplierId && (
                 <div style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  background: supplierOutstanding > 0 ? '#fff7ed' : '#f0fdf4',
-                  border: `1px solid ${supplierOutstanding > 0 ? '#fed7aa' : '#bbf7d0'}`,
+                  background: supplierOutstanding > 0 ? '#fff7ed' : supplierOutstanding < 0 ? '#eff6ff' : '#f0fdf4',
+                  border: `1px solid ${supplierOutstanding > 0 ? '#fed7aa' : supplierOutstanding < 0 ? '#bfdbfe' : '#bbf7d0'}`,
                   borderRadius: '8px', padding: '10px 14px', marginTop: '4px'
                 }}>
-                  <span style={{ fontSize: '12px', color: supplierOutstanding > 0 ? '#92400e' : '#14532d' }}>
-                    Previous outstanding with {suppliers.find((s: any) => s.id === supplierId)?.name}
+                  <span style={{ fontSize: '12px', color: supplierOutstanding > 0 ? '#92400e' : supplierOutstanding < 0 ? '#1e40af' : '#14532d' }}>
+                    Previous balance with {suppliers.find((s: any) => s.id === supplierId)?.name}
                   </span>
-                  <strong style={{ fontSize: '14px', color: supplierOutstanding > 0 ? '#b45309' : '#15803d' }}>
-                    {supplierOutstanding > 0 ? `₹${(supplierOutstanding / 100).toFixed(2)} due` : '✓ Settled'}
+                  <strong style={{ fontSize: '14px', color: supplierOutstanding > 0 ? '#b45309' : supplierOutstanding < 0 ? '#1d4ed8' : '#15803d' }}>
+                    {supplierOutstanding > 0
+                      ? `₹${(supplierOutstanding / 100).toFixed(2)} due`
+                      : supplierOutstanding < 0
+                        ? `₹${(Math.abs(supplierOutstanding) / 100).toFixed(2)} advance/credit`
+                        : '✓ Settled'}
                   </strong>
                 </div>
               )}

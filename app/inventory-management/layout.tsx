@@ -140,7 +140,6 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
 
         <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '12px 0' }}></div>
 
-        <button className={isActive('/inventory-management/supplier-ledger') ? 'active' : ''} onClick={() => router.push('/inventory-management/supplier-ledger')}>Supplier Ledger</button>
         <button className={isActive('/inventory-management/customer-ledger') ? 'active' : ''} onClick={() => router.push('/inventory-management/customer-ledger')}>Customer Ledger</button>
         <button className={isActive('/inventory-management/daily-closing') ? 'active' : ''} onClick={() => router.push('/inventory-management/daily-closing')}>Daily Closing</button>
 
