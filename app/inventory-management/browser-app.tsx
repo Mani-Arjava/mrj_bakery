@@ -1036,6 +1036,94 @@ export function CustomerWorkspace({ customers, items, save, refresh }: any) {
   );
 }
 
+export function ProductsWorkspace({ products, save, refresh }: any) {
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ name: '', baseUnit: 'piece', price: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!form.name) return;
+
+    save(() => {
+      if (editingId) {
+        storage.updateMaster('item', editingId, { ...form, type: 'FINISHED_GOOD', reorderLevel: 0, pricePerUnitPaise: Math.round(Number(form.price) * 100) });
+      } else {
+        storage.addMaster('item', { name: form.name, type: 'FINISHED_GOOD', baseUnit: form.baseUnit, reorderLevel: 0, pricePerUnitPaise: Math.round(Number(form.price) * 100) });
+      }
+    });
+
+    setForm({ name: '', baseUnit: 'piece', price: '' });
+    setEditingId(null);
+    setShowModal(false);
+  }
+
+  function openEdit(product: any) {
+    setForm({ name: product.name, baseUnit: product.baseUnit, price: (product.pricePerUnitPaise / 100).toString() });
+    setEditingId(product.id);
+    setShowModal(true);
+  }
+
+  return (
+    <div className="im-form">
+      <p className="im-kicker">PRODUCTS</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2>Finished Goods</h2>
+        <button className="im-primary" onClick={() => { setForm({ name: '', baseUnit: 'piece', price: '' }); setEditingId(null); setShowModal(true); }}>+ Add Product</button>
+      </div>
+
+      {products.length === 0 ? (
+        <div className="im-empty"><b>No products yet</b><p>Add your first finished good to start tracking production.</p></div>
+      ) : (
+        <table style={{ marginTop: '8px', width: '100%' }}>
+          <thead>
+            <tr><th>Product</th><th>Unit</th><th>Price per unit</th></tr>
+          </thead>
+          <tbody>
+            {products.map((p: any) => (
+              <tr key={p.id} onClick={() => openEdit(p)} style={{ cursor: 'pointer' }}>
+                <td><b style={{ color: 'var(--coffee)' }}>{p.name}</b></td>
+                <td style={{ color: 'var(--muted)' }}>{p.baseUnit}</td>
+                <td>₹{(p.pricePerUnitPaise / 100).toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {showModal && (
+        <div className="im-modal-backdrop" onClick={() => setShowModal(false)}>
+          <div className="im-modal" onClick={e => e.stopPropagation()}>
+            <h3>{editingId ? 'Edit Product' : 'Add Product'}</h3>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <label>
+                Product Name
+                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
+              </label>
+              <label>
+                Unit
+                <select value={form.baseUnit} onChange={e => setForm({ ...form, baseUnit: e.target.value })}>
+                  <option>piece</option>
+                  <option>kg</option>
+                  <option>litre</option>
+                </select>
+              </label>
+              <label>
+                Price per unit (₹)
+                <input type="number" step="0.01" min="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} required />
+              </label>
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button type="button" className="im-secondary" onClick={() => setShowModal(false)}>Cancel</button>
+                <button type="submit" className="im-primary">Save</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ProductionWorkspace({ products, materials, save, refresh }: any) {
   if (products.length === 0) {
     return (
@@ -1044,181 +1132,126 @@ export function ProductionWorkspace({ products, materials, save, refresh }: any)
         <h2>Record production batch</h2>
         <div className="im-empty">
           <b>No finished products yet</b>
-          <p>Add finished goods in Items first, then define recipes for them before recording production batches.</p>
+          <p>Add products in the Products section first, then you can record production here.</p>
         </div>
       </div>
     );
   }
 
   const [selectedProduct, setSelectedProduct] = useState('');
-  const [plannedQty, setPlannedQty] = useState('');
-  const [actualQty, setActualQty] = useState('');
-  const [team, setTeam] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [consumedLines, setConsumedLines] = useState<Array<{ materialId: string; qty: string }>>([{ materialId: '', qty: '' }]);
+  const [errors, setErrors] = useState<string[]>([]);
   const [note, setNote] = useState('');
-  const [stockCheck, setStockCheck] = useState<Array<{ name: string; required: number; available: number; unit: string; status: 'ok' | 'low' | 'unavailable' }>>([]);
-  const [showWarning, setShowWarning] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
 
-  const recipe = selectedProduct ? storage.getRecipeForProduct(selectedProduct) : null;
+  const selectedItem = products.find((p: any) => p.id === selectedProduct);
 
-  const checkStock = (qty: number) => {
-    if (!recipe) return;
-    const checks: Array<{ name: string; required: number; available: number; unit: string; status: 'ok' | 'low' | 'unavailable' }> = [];
-    for (const line of recipe.lines) {
+  function validateStock() {
+    const newErrors: string[] = [];
+    for (const line of consumedLines) {
+      if (!line.materialId || !line.qty) continue;
+      const material = materials.find((m: any) => m.id === line.materialId);
+      if (!material) continue;
       const stock = storage.getStockBalance(line.materialId);
-      const required = line.quantity * qty;
-      const available = stock.quantity;
-      const status: 'ok' | 'low' | 'unavailable' = available === 0 ? 'unavailable' : available < required ? 'low' : 'ok';
-      checks.push({ name: line.materialName, required, available, unit: line.unit, status });
+      if (stock.quantity === 0) {
+        newErrors.push(`${material.name} has 0 stock — cannot use for production`);
+      }
     }
-    setStockCheck(checks);
-    setShowWarning(checks.some(c => c.status !== 'ok'));
-  };
+    setErrors(newErrors);
+    return newErrors.length === 0;
+  }
 
-  useEffect(() => {
-    if (plannedQty && recipe) checkStock(Number(plannedQty));
-  }, [plannedQty, recipe]);
-
-  async function submit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!selectedProduct || !plannedQty || !actualQty) return;
-    if (showWarning && !confirmed) {
-      setConfirmed(true);
-      return;
-    }
+    if (!selectedProduct || !quantity) return;
 
-    if (recipe?.lines) {
-      const consumption = recipe.lines.map(line => ({
-        itemId: line.materialId,
-        quantity: Number(plannedQty) * line.quantity,
-        unit: line.unit
-      }));
+    if (!validateStock()) return;
 
-      save(() => {
-        storage.postProduction({
-          date: today(),
-          productId: selectedProduct,
-          quantityProduced: Number(actualQty),
-          team,
-          consumption,
-          note: note || `Planned: ${plannedQty}, Actual: ${actualQty}`
-        });
+    const validLines = consumedLines.filter(l => l.materialId && Number(l.qty) > 0);
+    if (validLines.length === 0) return;
+
+    save(() => {
+      storage.postProduction({
+        date: today(),
+        productId: selectedProduct,
+        quantityProduced: Number(quantity),
+        team: '',
+        consumption: validLines.map(l => ({
+          itemId: l.materialId,
+          quantity: Number(l.qty),
+          unit: materials.find((m: any) => m.id === l.materialId)?.baseUnit || 'piece'
+        })),
+        note
       });
+    });
 
-      setSelectedProduct('');
-      setPlannedQty('');
-      setActualQty('');
-      setTeam('');
-      setNote('');
-      setStockCheck([]);
-      setConfirmed(false);
-    }
+    setSelectedProduct('');
+    setQuantity('');
+    setConsumedLines([{ materialId: '', qty: '' }]);
+    setNote('');
+    setErrors([]);
   }
 
   return (
     <div className="im-form">
       <p className="im-kicker">PRODUCTION</p>
-      <h2>Record production batch</h2>
+      <h2>Record production</h2>
 
-      {selectedProduct === '' && (
-        <p style={{ color: 'var(--muted)', fontSize: '13px', marginTop: '16px' }}>Select a product above to begin</p>
-      )}
+      <form onSubmit={handleSubmit}>
+        <label>
+          Product
+          <select value={selectedProduct} onChange={e => { setSelectedProduct(e.target.value); setErrors([]); }}>
+            <option value="">Select product…</option>
+            {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </label>
 
-      <label>
-        Product
-        <select value={selectedProduct} onChange={e => { setSelectedProduct(e.target.value); setConfirmed(false); setStockCheck([]); }} required>
-          <option value="">Select product…</option>
-          {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-      </label>
-
-      {selectedProduct !== '' && recipe && recipe.lines.length > 0 ? (
-        <>
-          <p className="im-form-subtitle">Production Planning</p>
-          <div className="im-two">
+        {selectedProduct && (
+          <>
             <label>
-              Planned batch quantity
-              <input type="number" min="0.01" step="0.01" value={plannedQty} onChange={e => setPlannedQty(e.target.value)} placeholder="e.g. 500" required />
+              Quantity produced ({selectedItem?.baseUnit})
+              <input type="number" min="0.01" step="0.01" value={quantity} onChange={e => setQuantity(e.target.value)} required />
             </label>
+
+            <p className="im-form-subtitle">Raw Materials Used</p>
+            {consumedLines.map((line, idx) => (
+              <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'flex-end' }}>
+                <label style={{ flex: 1 }}>
+                  Material
+                  <select value={line.materialId} onChange={e => { const newLines = [...consumedLines]; newLines[idx].materialId = e.target.value; setConsumedLines(newLines); }}>
+                    <option value="">Select…</option>
+                    {materials.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </label>
+                <label style={{ flex: 0.8 }}>
+                  Qty
+                  <input type="number" min="0.01" step="0.01" value={line.qty} onChange={e => { const newLines = [...consumedLines]; newLines[idx].qty = e.target.value; setConsumedLines(newLines); }} />
+                </label>
+                {consumedLines.length > 1 && (
+                  <button type="button" onClick={() => setConsumedLines(consumedLines.filter((_, i) => i !== idx))} style={{ padding: '6px 12px', color: '#a43932' }}>×</button>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={() => setConsumedLines([...consumedLines, { materialId: '', qty: '' }])} className="im-secondary" style={{ marginBottom: '16px' }}>+ Add Material</button>
+
+            {errors.length > 0 && (
+              <div className="im-error" style={{ marginBottom: '16px' }}>
+                <strong>Cannot produce:</strong>
+                <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
+                  {errors.map((err, i) => <li key={i}>{err}</li>)}
+                </ul>
+              </div>
+            )}
+
             <label>
-              Actual quantity produced
-              <input type="number" min="0.01" step="0.01" value={actualQty} onChange={e => setActualQty(e.target.value)} placeholder="e.g. 480" required />
+              Notes
+              <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Any production notes…" />
             </label>
-          </div>
 
-          <p className="im-form-subtitle">Stock requirement verification</p>
-          {stockCheck.length > 0 && (
-            <div className="im-stock-check">
-              {stockCheck.map((item, idx) => (
-                <div key={idx} className={`im-check-item ${item.status}`}>
-                  <span><strong>{item.name}</strong></span>
-                  <span className="required">Required: <strong>{item.required.toFixed(2)}</strong> {item.unit}</span>
-                  <span className="available">Available: <strong>{item.available.toFixed(2)}</strong> {item.unit}</span>
-                  <span className={`status ${item.status}`}>
-                    {item.status === 'ok' ? '✓ OK' : item.status === 'low' ? '⚠ LOW' : '✗ OUT'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {showWarning && !confirmed && (
-            <div className="im-warning">
-              <strong>⚠ Stock Shortage Alert</strong>
-              <p>Some materials are below requirement. Review the stock check above.</p>
-              <p><small>Click "Continue Production" to proceed anyway, or adjust planned quantity.</small></p>
-            </div>
-          )}
-
-          {showWarning && confirmed && (
-            <div className="im-notice" style={{ background: '#fee7e5', color: '#a43932' }}>
-              <strong>⚠ Proceeding with shortage override</strong>
-            </div>
-          )}
-
-          <div className="im-two">
-            <label>
-              Team / Operator
-              <input type="text" value={team} onChange={e => setTeam(e.target.value)} placeholder="e.g. Morning shift" />
-            </label>
-            <label>
-              Production Notes
-              <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Any issues, delays, quality notes…" />
-            </label>
-          </div>
-
-          <button type="submit" onClick={submit}>
-            {showWarning && !confirmed ? 'Continue Production →' : 'Post Production →'}
-          </button>
-
-          <div className="im-recipe-summary">
-            <h4>Recipe: {recipe.productName}</h4>
-            <table>
-              <thead>
-                <tr>
-                  <th>Material</th>
-                  <th>Per {plannedQty || '1'} units</th>
-                  <th>Unit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recipe.lines.map((line: any, idx: number) => (
-                  <tr key={idx}>
-                    <td>{line.materialName}</td>
-                    <td className="text-right">{plannedQty ? (line.quantity * Number(plannedQty)).toFixed(2) : line.quantity}</td>
-                    <td>{line.unit}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      ) : selectedProduct !== '' && (!recipe || recipe.lines.length === 0) ? (
-        <div className="im-notice" style={{ background: '#e2f2dd', color: '#285d40' }}>
-          <strong>ℹ Recipe required</strong>
-          <p>Define a recipe for <b>{recipe?.productName || 'this product'}</b> in the Recipes section first.</p>
-        </div>
-      ) : null}
+            <button type="submit" disabled={errors.length > 0}>Post Production →</button>
+          </>
+        )}
+      </form>
     </div>
   );
 }

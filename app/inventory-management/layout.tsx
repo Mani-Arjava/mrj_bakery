@@ -99,6 +99,7 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
     '/inventory-management/suppliers': 'Suppliers',
     '/inventory-management/purchases': 'Purchases',
     '/inventory-management/customers': 'Customers',
+    '/inventory-management/products': 'Products',
     '/inventory-management/production': 'Production',
     '/inventory-management/expenses': 'Expenses',
     '/inventory-management/recipes': 'Recipes',
@@ -131,6 +132,7 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
 
         <button className={isActive('/inventory-management/purchases') ? 'active' : ''} onClick={() => router.push('/inventory-management/purchases')}>Purchases</button>
         <button className={isActive('/inventory-management/customers') ? 'active' : ''} onClick={() => router.push('/inventory-management/customers')}>Customers</button>
+        <button className={isActive('/inventory-management/products') ? 'active' : ''} onClick={() => router.push('/inventory-management/products')}>Products</button>
         <button className={isActive('/inventory-management/production') ? 'active' : ''} onClick={() => router.push('/inventory-management/production')}>Production</button>
         <button className={isActive('/inventory-management/expenses') ? 'active' : ''} onClick={() => router.push('/inventory-management/expenses')}>Expenses</button>
 

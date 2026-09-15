@@ -95,6 +95,13 @@ export function updateItemReorderLevel(itemId: string, reorderLevel: number) {
   if (item) { item.reorderLevel = reorderLevel; saveData(data); }
 }
 
+export function updateMaster(kind: 'supplier' | 'customer' | 'item', id: string, updates: Record<string, any>) {
+  const data = getData();
+  const tab = kind === 'supplier' ? 'suppliers' : kind === 'customer' ? 'customers' : 'items';
+  const record = (data[tab as keyof StorageData] as any[]).find((r: any) => r.id === id);
+  if (record) { Object.assign(record, updates); saveData(data); }
+}
+
 export function getMasterData() {
   const data = getData();
   return {
