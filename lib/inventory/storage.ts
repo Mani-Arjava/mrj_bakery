@@ -626,7 +626,7 @@ export function getPurchaseHistory() {
         supplierName: supplierMap.get(inv.supplierId)?.name || 'Unknown',
         billAmountPaise: Number(inv.billAmountPaise),
         paidAmountPaise: Number(inv.paidAmountPaise),
-        pendingPaise: Math.max(0, Number(inv.billAmountPaise) - Number(inv.paidAmountPaise)),
+        pendingPaise: Number(inv.billAmountPaise) - Number(inv.paidAmountPaise),
         lineCount: lines.length,
         lines: lines.map(l => ({
           itemName: itemMap.get(l.itemId)?.name || l.itemId,

@@ -494,6 +494,11 @@ export function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
   const total = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.price || 0), 0);
   const purchaseHistory = storage.getPurchaseHistory();
 
+  // Consolidated outstanding for selected supplier (sum of per-invoice pending, negative = credit)
+  const supplierOutstanding = supplierId
+    ? purchaseHistory.filter(b => b.supplierId === supplierId).reduce((s, b) => s + b.pendingPaise, 0)
+    : 0;
+
   function resetModal() {
     setSupplierId('');
     setLines([{ name: '', quantity: '', unit: 'kg', price: '' }]);
@@ -565,7 +570,7 @@ export function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
                     {new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
                   </span>
                   <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                    {money(dayTotal)}{dayPending > 0 ? ` · ₹${(dayPending / 100).toFixed(0)} due` : ''}
+                    {money(dayTotal)}{dayPending > 0 ? ` · ₹${(dayPending / 100).toFixed(0)} due` : dayPending < 0 ? ` · ₹${Math.abs(dayPending / 100).toFixed(0)} credit` : ' · Settled'}
                   </span>
                 </div>
                 <table style={{ width: '100%', fontSize: '12px' }}>
@@ -626,12 +631,28 @@ export function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
                     No suppliers yet. <a href="/inventory-management/suppliers" style={{ color: 'var(--coffee)', fontWeight: 700 }}>Go to Suppliers page</a> to add one first.
                   </p>
                 )}
-                {suppliers.length > 0 && (
+                {suppliers.length > 0 && !supplierId && (
                   <p style={{ margin: '6px 0 0', fontSize: '11px', color: 'var(--muted)' }}>
                     Supplier not listed? <a href="/inventory-management/suppliers" style={{ color: 'var(--coffee)', fontWeight: 700 }}>Go to Suppliers page</a> to add them.
                   </p>
                 )}
               </label>
+
+              {supplierId && (
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  background: supplierOutstanding > 0 ? '#fff7ed' : '#f0fdf4',
+                  border: `1px solid ${supplierOutstanding > 0 ? '#fed7aa' : '#bbf7d0'}`,
+                  borderRadius: '8px', padding: '10px 14px', marginTop: '4px'
+                }}>
+                  <span style={{ fontSize: '12px', color: supplierOutstanding > 0 ? '#92400e' : '#14532d' }}>
+                    Previous outstanding with {suppliers.find((s: any) => s.id === supplierId)?.name}
+                  </span>
+                  <strong style={{ fontSize: '14px', color: supplierOutstanding > 0 ? '#b45309' : '#15803d' }}>
+                    {supplierOutstanding > 0 ? `₹${(supplierOutstanding / 100).toFixed(2)} due` : '✓ Settled'}
+                  </strong>
+                </div>
+              )}
 
               <label>
                 Date
@@ -642,7 +663,20 @@ export function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
                 <div className="im-line-head"><span>Item</span><span>Qty</span><span>Unit</span><span>Rate ₹</span><span>Total</span></div>
                 {lines.map((line, idx) => (
                   <div className="im-purchase-line" key={idx}>
-                    <input list="raw-items-modal" value={line.name} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, name: e.target.value } : l))} placeholder="Item name" required />
+                    <input
+                      list="raw-items-modal"
+                      value={line.name}
+                      onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, name: e.target.value } : l))}
+                      onBlur={e => {
+                        const typed = e.target.value.trim();
+                        const match = items.find((it: any) => it.name.toLowerCase() === typed.toLowerCase());
+                        if (match && match.name !== typed) {
+                          setLines(lines.map((l, i) => i === idx ? { ...l, name: match.name } : l));
+                        }
+                      }}
+                      placeholder="Item name"
+                      required
+                    />
                     <input value={line.quantity} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: e.target.value } : l))} type="number" min="0.01" step="0.01" required />
                     <select value={line.unit} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, unit: e.target.value } : l))}>
                       <option>kg</option><option>litre</option><option>piece</option>
@@ -1753,6 +1787,8 @@ export function SuppliersWorkspace({ suppliers, save, refresh }: { suppliers: an
     const supplierPurchases = allPurchases.filter(b => b.supplierId === selectedSupplier.id);
     const totalBilled = supplierPurchases.reduce((s, b) => s + b.billAmountPaise, 0);
     const totalPaid = supplierPurchases.reduce((s, b) => s + b.paidAmountPaise, 0);
+    // Sum raw pendingPaise (negative = overpaid/credit, correct cross-bill net)
+    const consolidatedOutstanding = supplierPurchases.reduce((s, b) => s + b.pendingPaise, 0);
 
     return (
       <div className="im-form">
@@ -1779,7 +1815,9 @@ export function SuppliersWorkspace({ suppliers, save, refresh }: { suppliers: an
           </div>
           <div style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: '10px', padding: '16px' }}>
             <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Outstanding</span>
-            <strong style={{ display: 'block', fontSize: '20px', marginTop: '6px', color: totalBilled - totalPaid > 0 ? '#bd4c3e' : '#1a8754' }}>{money(totalBilled - totalPaid)}</strong>
+            <strong style={{ display: 'block', fontSize: '20px', marginTop: '6px', color: consolidatedOutstanding > 0 ? '#bd4c3e' : '#1a8754' }}>
+              {consolidatedOutstanding > 0 ? money(consolidatedOutstanding) + ' due' : consolidatedOutstanding < 0 ? money(Math.abs(consolidatedOutstanding)) + ' credit' : '✓ Nil'}
+            </strong>
           </div>
         </div>
 
@@ -1803,7 +1841,9 @@ export function SuppliersWorkspace({ suppliers, save, refresh }: { suppliers: an
                       <td>{bill.lineCount} item(s)</td>
                       <td>{money(bill.billAmountPaise)}</td>
                       <td>{money(bill.paidAmountPaise)}</td>
-                      <td style={{ fontWeight: 700, color: bill.pendingPaise > 0 ? '#bd4c3e' : '#1a8754' }}>{money(bill.pendingPaise)}</td>
+                      <td style={{ fontWeight: 700, color: bill.pendingPaise > 0 ? '#bd4c3e' : '#1a8754' }}>
+                        {bill.pendingPaise > 0 ? money(bill.pendingPaise) + ' due' : '✓ Settled'}
+                      </td>
                     </tr>
                     {expandedBillId === bill.id && (
                       <tr style={{ background: '#f9faf7' }}>
