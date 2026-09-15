@@ -102,7 +102,6 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
     '/inventory-management/products': 'Products',
     '/inventory-management/production': 'Production',
     '/inventory-management/expenses': 'Expenses',
-    '/inventory-management/recipes': 'Recipes',
     '/inventory-management/supplier-ledger': 'Supplier Ledger',
     '/inventory-management/customer-ledger': 'Customer Ledger',
     '/inventory-management/daily-closing': 'Daily Closing',
@@ -135,10 +134,6 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
         <button className={isActive('/inventory-management/products') ? 'active' : ''} onClick={() => router.push('/inventory-management/products')}>Products</button>
         <button className={isActive('/inventory-management/production') ? 'active' : ''} onClick={() => router.push('/inventory-management/production')}>Production</button>
         <button className={isActive('/inventory-management/expenses') ? 'active' : ''} onClick={() => router.push('/inventory-management/expenses')}>Expenses</button>
-
-        <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '12px 0' }}></div>
-
-        <button className={isActive('/inventory-management/recipes') ? 'active' : ''} onClick={() => router.push('/inventory-management/recipes')}>Recipes</button>
 
         <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '12px 0' }}></div>
 
