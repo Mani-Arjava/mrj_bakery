@@ -2,7 +2,7 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import type { DashboardData } from '@/lib/inventory/types';
 import * as storage from '@/lib/inventory/storage';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -463,17 +463,46 @@ export function ItemsWorkspace({ items, save, refresh }: any) {
             {chartData.length > 0 ? (
               <div style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: '12px', padding: '20px', marginBottom: '24px' }}>
                 <p className="im-kicker" style={{ marginBottom: '16px' }}>PRICE TREND (₹ per {selectedItem.baseUnit})</p>
-                <ResponsiveContainer width="100%" height={260}>
-                  <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0e8d8" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#8f7662' }} />
-                    <YAxis tick={{ fontSize: 10, fill: '#8f7662' }} tickFormatter={v => `₹${v}`} />
-                    <Tooltip formatter={(v: any) => [`₹${v}`, '']} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e6d3bd' }} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                <ResponsiveContainer width="100%" height={280}>
+                  <AreaChart data={chartData} margin={{ top: 20, right: 32, left: 8, bottom: 8 }}>
+                    <defs>
+                      {(filterSupplier === 'all' ? suppliers : suppliers.filter(s => s.id === filterSupplier)).map((s, i) => (
+                        <linearGradient key={s.id} id={`grad-${i}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={SUPPLIER_COLORS[i % SUPPLIER_COLORS.length]} stopOpacity={0.15} />
+                          <stop offset="95%" stopColor={SUPPLIER_COLORS[i % SUPPLIER_COLORS.length]} stopOpacity={0} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <CartesianGrid vertical={false} stroke="#f0e8d8" strokeDasharray="0" />
+                    <XAxis
+                      dataKey="date" tick={{ fontSize: 10, fill: '#8f7662' }}
+                      axisLine={false} tickLine={false}
+                      padding={{ left: 24, right: 24 }}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: '#8f7662' }} tickFormatter={v => `₹${v}`}
+                      domain={['auto', 'auto']} width={52}
+                      axisLine={false} tickLine={false}
+                    />
+                    <Tooltip
+                      cursor={{ stroke: '#8f7662', strokeWidth: 1, strokeDasharray: '4 2' }}
+                      formatter={(v: any, name: any) => [`₹${v}`, name]}
+                      labelStyle={{ fontSize: 11, fontWeight: 700, color: '#211109', marginBottom: 6 }}
+                      contentStyle={{ fontSize: 12, borderRadius: 10, border: '1px solid #e6d3bd', background: '#fffaf2', boxShadow: '0 4px 16px #00000010', padding: '10px 14px' }}
+                      itemStyle={{ color: '#3a2013', fontWeight: 600 }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 12 }} />
                     {(filterSupplier === 'all' ? suppliers : suppliers.filter(s => s.id === filterSupplier)).map((s, i) => (
-                      <Line key={s.id} type="monotone" dataKey={s.name} stroke={SUPPLIER_COLORS[i % SUPPLIER_COLORS.length]} strokeWidth={2} dot={{ r: 4 }} connectNulls />
+                      <Area
+                        key={s.id} type="monotone" dataKey={s.name}
+                        stroke={SUPPLIER_COLORS[i % SUPPLIER_COLORS.length]} strokeWidth={2.5}
+                        fill={`url(#grad-${i})`}
+                        dot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: SUPPLIER_COLORS[i % SUPPLIER_COLORS.length] }}
+                        activeDot={{ r: 6, strokeWidth: 0, fill: SUPPLIER_COLORS[i % SUPPLIER_COLORS.length] }}
+                        connectNulls
+                      />
                     ))}
-                  </LineChart>
+                  </AreaChart>
                 </ResponsiveContainer>
               </div>
             ) : (
