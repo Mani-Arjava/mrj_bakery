@@ -4,6 +4,56 @@ import type { DashboardData } from '@/lib/inventory/types';
 import * as storage from '@/lib/inventory/storage';
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+export function useInventoryData() {
+  const [dashboard, setDashboard] = useState<DashboardData>({ generatedAt: '', configured: false, cards: { rawMaterialValuePaise: 0, lowStockCount: 0, todayPurchasePaise: 0, todayProductionUnits: 0, todaySalesPaise: 0, supplierOutstandingPaise: 0, customerOutstandingPaise: 0, todayExpensePaise: 0, todayProfitPaise: 0 }, lowStock: [], topProducts: [], recentActivity: [] });
+  const [items, setItems] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [recipes, setRecipes] = useState<any[]>([]);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    storage.initStorage();
+    refresh();
+  }, []);
+
+  const refresh = useCallback(() => {
+    try {
+      const master = storage.getMasterData();
+      setItems(master.items);
+      setSuppliers(master.suppliers);
+      setCustomers(master.customers);
+      const data = storage.getData();
+      setRecipes(data.recipes);
+      const dash = storage.getDashboard() as any;
+      setDashboard(dash);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Load failed');
+    }
+  }, []);
+
+  async function save(action: () => void) {
+    try {
+      setError('');
+      setNotice('');
+      setLoading(true);
+      action();
+      setNotice('Saved successfully');
+      await new Promise(r => setTimeout(r, 300));
+      refresh();
+      setTimeout(() => setNotice(''), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return { dashboard, items, suppliers, customers, recipes, notice, error, loading, save, refresh, setNotice, setError };
+}
 const money = (value = 0) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value / 100);
 const empty: DashboardData = { generatedAt: '', configured: false, cards: { rawMaterialValuePaise: 0, lowStockCount: 0, todayPurchasePaise: 0, todayProductionUnits: 0, todaySalesPaise: 0, supplierOutstandingPaise: 0, customerOutstandingPaise: 0, todayExpensePaise: 0, todayProfitPaise: 0 }, lowStock: [], topProducts: [], recentActivity: [] };
 
@@ -103,6 +153,7 @@ export default function BrowserApp() {
 
         <div className="im-sidebar-bottom">
           <span>Browser-only app</span>
+          <button className="im-logout-btn" onClick={() => { localStorage.removeItem('bakery_auth'); window.location.reload(); }}>Sign out</button>
         </div>
       </aside>
 
@@ -135,7 +186,7 @@ export default function BrowserApp() {
   );
 }
 
-function LoginScreen({ onLogin }: { onLogin: () => void }) {
+export function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -215,7 +266,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
   );
 }
 
-function Dashboard({ data, onNavigate, hasData }: { data: DashboardData; onNavigate: (view: View) => void; hasData: boolean }) {
+export function Dashboard({ data, onNavigate, hasData }: { data: DashboardData; onNavigate: (view: View) => void; hasData: boolean }) {
   const colors = ['lime', 'red', 'blue', 'green', 'orange', 'gold', 'red', 'orange', 'green'];
   const values = [
     ['Raw-material value', money(data.cards.rawMaterialValuePaise)],
@@ -310,7 +361,7 @@ function Dashboard({ data, onNavigate, hasData }: { data: DashboardData; onNavig
   );
 }
 
-function ItemsWorkspace({ items, suppliers, customers, save, refresh }: any) {
+export function ItemsWorkspace({ items, suppliers, customers, save, refresh }: any) {
   const [tab, setTab] = useState<'suppliers' | 'customers' | 'items'>('suppliers');
   const [supplierForm, setSupplierForm] = useState({ name: '', phone: '', contactPerson: '', address: '' });
   const [customerForm, setCustomerForm] = useState({ name: '', phone: '', contactPerson: '', address: '' });
@@ -476,7 +527,7 @@ function ItemsWorkspace({ items, suppliers, customers, save, refresh }: any) {
   );
 }
 
-function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
+export function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
   const [selectedSupplier, setSelectedSupplier] = useState<any>(null);
   const [lines, setLines] = useState([{ name: '', quantity: '', unit: 'kg', price: '' }]);
   const [paid, setPaid] = useState('0');
@@ -731,7 +782,7 @@ function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
   );
 }
 
-function CustomerWorkspace({ customers, items, save, refresh }: any) {
+export function CustomerWorkspace({ customers, items, save, refresh }: any) {
   const [type, setType] = useState<'WHOLESALE' | 'RETAIL'>('RETAIL');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [saleDate, setSaleDate] = useState(today());
@@ -928,7 +979,7 @@ function CustomerWorkspace({ customers, items, save, refresh }: any) {
   );
 }
 
-function ProductionWorkspace({ products, materials, save, refresh }: any) {
+export function ProductionWorkspace({ products, materials, save, refresh }: any) {
   if (products.length === 0) {
     return (
       <div className="im-form">
@@ -1115,7 +1166,7 @@ function ProductionWorkspace({ products, materials, save, refresh }: any) {
   );
 }
 
-function RecipesWorkspace({ products, materials, save, refresh }: any) {
+export function RecipesWorkspace({ products, materials, save, refresh }: any) {
   if (products.length === 0) {
     return (
       <div className="im-form">
@@ -1251,7 +1302,7 @@ function RecipesWorkspace({ products, materials, save, refresh }: any) {
   );
 }
 
-function SupplierLedgerWorkspace({ suppliers, save, refresh }: any) {
+export function SupplierLedgerWorkspace({ suppliers, save, refresh }: any) {
   const [selected, setSelected] = useState('');
   const [ledger, setLedger] = useState<any>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
@@ -1367,7 +1418,7 @@ function SupplierLedgerWorkspace({ suppliers, save, refresh }: any) {
   );
 }
 
-function CustomerLedgerWorkspace({ customers, save, refresh }: any) {
+export function CustomerLedgerWorkspace({ customers, save, refresh }: any) {
   const [selected, setSelected] = useState('');
   const [ledger, setLedger] = useState<any>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
@@ -1472,7 +1523,7 @@ function CustomerLedgerWorkspace({ customers, save, refresh }: any) {
   );
 }
 
-function DailyClosingWorkspace({ save, refresh }: any) {
+export function DailyClosingWorkspace({ save, refresh }: any) {
   const [physical, setPhysical] = useState('');
   const [summary, setSummary] = useState<any>(null);
 
@@ -1533,7 +1584,7 @@ function DailyClosingWorkspace({ save, refresh }: any) {
   );
 }
 
-function ReportsWorkspace() {
+export function ReportsWorkspace() {
   const [reportType, setReportType] = useState<'stock' | 'supplier' | 'customer' | 'expense' | 'profit'>('stock');
   const [reportData, setReportData] = useState<any>(null);
 
@@ -1693,7 +1744,7 @@ function ReportsWorkspace() {
   );
 }
 
-function ExpenseForm({ save, refresh }: any) {
+export function ExpenseForm({ save, refresh }: any) {
   async function submit(e: any) {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -1721,7 +1772,7 @@ function ExpenseForm({ save, refresh }: any) {
   );
 }
 
-function SettingsWorkspace({ onLogout }: { onLogout: () => void }) {
+export function SettingsWorkspace({ onLogout }: { onLogout: () => void }) {
   async function exportData() {
     storage.exportJSON();
   }
