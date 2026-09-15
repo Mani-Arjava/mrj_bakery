@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { Eye, EyeOff } from 'lucide-react';
 import './inventory.css';
 
 const ADMIN_USER = 'imran123';
@@ -65,7 +66,7 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
             </label>
             <label>
               Password
-              <div style={{ position: 'relative' }}>
+              <div className="im-password-wrapper">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Enter password"
@@ -75,22 +76,11 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
                 />
                 <button
                   type="button"
-                  style={{
-                    position: 'absolute',
-                    right: '10px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '16px',
-                    color: 'var(--muted)',
-                    padding: '4px 8px',
-                  }}
-                  title="Show password"
+                  className="im-password-toggle"
                   onClick={() => setShowPassword(!showPassword)}
+                  title={showPassword ? 'Hide password' : 'Show password'}
                 >
-                  👁️‍🗨️
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
             </label>

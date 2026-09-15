@@ -559,51 +559,77 @@ export function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
   }
 
   if (stage === 'history') {
+    // Group purchases by date
+    const byDate: Record<string, typeof purchaseHistory> = {};
+    for (const bill of purchaseHistory) {
+      if (!byDate[bill.date]) byDate[bill.date] = [];
+      byDate[bill.date].push(bill);
+    }
+    const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+
     return (
       <div className="im-form">
-        <div style={{ marginBottom: '24px' }}>
-          <button className="im-primary" onClick={() => { setStage('select-supplier'); setSupplierSearch(''); }}>New Purchase →</button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
+          <div>
+            <p className="im-kicker">PURCHASES</p>
+            <h2 style={{ margin: 0 }}>Purchase History</h2>
+          </div>
+          <button className="im-primary" onClick={() => { setStage('select-supplier'); setSupplierSearch(''); }}>+ New Purchase</button>
         </div>
 
         {purchaseHistory.length === 0 ? (
           <div className="im-empty" style={{ margin: '40px 0', textAlign: 'center' }}>
             <b>No purchases yet</b>
-            <p>Click "New Purchase" above to create your first one</p>
+            <p>Click "+ New Purchase" above to record your first one</p>
           </div>
         ) : (
-          <div>
-            <p className="im-kicker">PURCHASE HISTORY</p>
-            <h2>All purchases</h2>
-            <table style={{ width: '100%', marginTop: '12px', fontSize: '12px' }}>
-              <thead>
-                <tr>
-                  <th>Date</th><th>Supplier</th><th>Items</th><th>Total</th><th>Paid</th><th>Pending</th>
-                </tr>
-              </thead>
-              <tbody>
-                {purchaseHistory.map(bill => (
-                  <React.Fragment key={bill.id}>
-                    <tr onClick={() => setExpandedBillId(expandedBillId === bill.id ? null : bill.id)} style={{ cursor: 'pointer', backgroundColor: expandedBillId === bill.id ? '#f9faf7' : 'transparent' }}>
-                      <td>{bill.date}</td><td>{bill.supplierName}</td><td>{bill.lineCount} item(s)</td>
-                      <td>{money(bill.billAmountPaise)}</td><td>{money(bill.paidAmountPaise)}</td>
-                      <td style={{ fontWeight: 700, color: bill.pendingPaise > 0 ? '#bd4c3e' : '#79c998' }}>{money(bill.pendingPaise)}</td>
-                    </tr>
-                    {expandedBillId === bill.id && (
-                      <tr style={{ backgroundColor: '#f9faf7' }}>
-                        <td colSpan={6} style={{ padding: '12px', fontSize: '11px' }}>
-                          {bill.lines.map((line, idx) => (
-                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: idx > 0 ? '1px solid #edf0eb' : 'none' }}>
-                              <span><b>{line.itemName}</b> {line.quantity} {line.unit}</span>
-                              <span>{money(line.totalPaise)}</span>
-                            </div>
-                          ))}
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ display: 'grid', gap: '24px' }}>
+            {dates.map(date => {
+              const bills = byDate[date];
+              const dayTotal = bills.reduce((s, b) => s + b.billAmountPaise, 0);
+              const dayPending = bills.reduce((s, b) => s + b.pendingPaise, 0);
+              return (
+                <div key={date}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '2px solid var(--line)', paddingBottom: '8px', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+                      {new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                    </span>
+                    <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                      {money(dayTotal)}{dayPending > 0 ? ` · ₹${(dayPending / 100).toFixed(0)} due` : ''}
+                    </span>
+                  </div>
+                  <table style={{ width: '100%', fontSize: '12px' }}>
+                    <tbody>
+                      {bills.map(bill => (
+                        <React.Fragment key={bill.id}>
+                          <tr onClick={() => setExpandedBillId(expandedBillId === bill.id ? null : bill.id)} style={{ cursor: 'pointer', background: expandedBillId === bill.id ? '#f9faf7' : 'transparent' }}>
+                            <td style={{ paddingLeft: '4px' }}><b>{bill.supplierName}</b></td>
+                            <td style={{ color: 'var(--muted)' }}>{bill.lineCount} item(s)</td>
+                            <td>{money(bill.billAmountPaise)}</td>
+                            <td>{money(bill.paidAmountPaise)} paid</td>
+                            <td style={{ fontWeight: 700, color: bill.pendingPaise > 0 ? '#bd4c3e' : '#1a8754' }}>
+                              {bill.pendingPaise > 0 ? `${money(bill.pendingPaise)} due` : '✓ Settled'}
+                            </td>
+                          </tr>
+                          {expandedBillId === bill.id && (
+                            <tr style={{ background: '#f9faf7' }}>
+                              <td colSpan={5} style={{ padding: '10px 12px', fontSize: '11px' }}>
+                                {bill.lines.map((line, idx) => (
+                                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: idx > 0 ? '1px solid #edf0eb' : 'none' }}>
+                                    <span><b>{line.itemName}</b> · {line.quantity} {line.unit}</span>
+                                    <span>{money(line.totalPaise)}</span>
+                                  </div>
+                                ))}
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1797,6 +1823,8 @@ export function SettingsWorkspace({ onLogout }: { onLogout: () => void }) {
 export function SuppliersWorkspace({ suppliers, save, refresh }: { suppliers: any[]; save: (action: () => void) => Promise<void>; refresh: () => void }) {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', contactPerson: '', address: '' });
+  const [selectedSupplier, setSelectedSupplier] = useState<any>(null);
+  const [expandedBillId, setExpandedBillId] = useState<string | null>(null);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -1808,11 +1836,90 @@ export function SuppliersWorkspace({ suppliers, save, refresh }: { suppliers: an
     });
   };
 
+  if (selectedSupplier) {
+    const allPurchases = storage.getPurchaseHistory();
+    const supplierPurchases = allPurchases.filter(b => b.supplierId === selectedSupplier.id);
+    const totalBilled = supplierPurchases.reduce((s, b) => s + b.billAmountPaise, 0);
+    const totalPaid = supplierPurchases.reduce((s, b) => s + b.paidAmountPaise, 0);
+
+    return (
+      <div className="im-form">
+        <button type="button" className="im-secondary" onClick={() => { setSelectedSupplier(null); setExpandedBillId(null); }} style={{ marginBottom: '24px' }}>← All Suppliers</button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#e5f0d6', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: '20px', color: '#3a2013', flexShrink: 0 }}>
+            {selectedSupplier.name.slice(0, 1).toUpperCase()}
+          </div>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '24px', fontFamily: 'Playfair Display, serif' }}>{selectedSupplier.name}</h2>
+            {selectedSupplier.phone && <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: '13px' }}>{selectedSupplier.phone}{selectedSupplier.contactPerson ? ` · ${selectedSupplier.contactPerson}` : ''}</p>}
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '28px' }}>
+          <div style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: '10px', padding: '16px' }}>
+            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Total Bills</span>
+            <strong style={{ display: 'block', fontSize: '20px', marginTop: '6px' }}>{supplierPurchases.length}</strong>
+          </div>
+          <div style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: '10px', padding: '16px' }}>
+            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Total Purchased</span>
+            <strong style={{ display: 'block', fontSize: '20px', marginTop: '6px' }}>{money(totalBilled)}</strong>
+          </div>
+          <div style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: '10px', padding: '16px' }}>
+            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Outstanding</span>
+            <strong style={{ display: 'block', fontSize: '20px', marginTop: '6px', color: totalBilled - totalPaid > 0 ? '#bd4c3e' : '#1a8754' }}>{money(totalBilled - totalPaid)}</strong>
+          </div>
+        </div>
+
+        {supplierPurchases.length === 0 ? (
+          <div className="im-empty" style={{ textAlign: 'center', margin: '40px 0' }}>
+            <b>No purchases yet</b>
+            <p>No purchases have been recorded for this supplier.</p>
+          </div>
+        ) : (
+          <>
+            <p className="im-kicker">PURCHASE HISTORY</p>
+            <table style={{ width: '100%', marginTop: '12px', fontSize: '12px' }}>
+              <thead>
+                <tr><th>Date</th><th>Items</th><th>Total</th><th>Paid</th><th>Pending</th></tr>
+              </thead>
+              <tbody>
+                {supplierPurchases.map(bill => (
+                  <React.Fragment key={bill.id}>
+                    <tr onClick={() => setExpandedBillId(expandedBillId === bill.id ? null : bill.id)} style={{ cursor: 'pointer', background: expandedBillId === bill.id ? '#f9faf7' : 'transparent' }}>
+                      <td>{bill.date}</td>
+                      <td>{bill.lineCount} item(s)</td>
+                      <td>{money(bill.billAmountPaise)}</td>
+                      <td>{money(bill.paidAmountPaise)}</td>
+                      <td style={{ fontWeight: 700, color: bill.pendingPaise > 0 ? '#bd4c3e' : '#1a8754' }}>{money(bill.pendingPaise)}</td>
+                    </tr>
+                    {expandedBillId === bill.id && (
+                      <tr style={{ background: '#f9faf7' }}>
+                        <td colSpan={5} style={{ padding: '12px', fontSize: '11px' }}>
+                          {bill.lines.map((line, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: idx > 0 ? '1px solid #edf0eb' : 'none' }}>
+                              <span><b>{line.itemName}</b> · {line.quantity} {line.unit}</span>
+                              <span>{money(line.totalPaise)}</span>
+                            </div>
+                          ))}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="im-form">
       <div className="im-section-actions">
         <h2 className="im-page-title">Suppliers</h2>
-        <button className="im-primary" onClick={() => setShowModal(true)}>Add Supplier</button>
+        <button className="im-primary" onClick={() => setShowModal(true)}>+ Add Supplier</button>
       </div>
 
       {suppliers.length === 0 ? (
@@ -1822,14 +1929,20 @@ export function SuppliersWorkspace({ suppliers, save, refresh }: { suppliers: an
         </div>
       ) : (
         <div className="im-party-grid" style={{ marginTop: '24px' }}>
-          {suppliers.map((s: any) => (
-            <div key={s.id} className="im-party-card" style={{ cursor: 'default', background: '#f9faf7' }}>
-              <span>{s.name.slice(0, 1).toUpperCase()}</span>
-              <b>{s.name}</b>
-              {s.phone && <small>{s.phone}</small>}
-              {s.contactPerson && <small>{s.contactPerson}</small>}
-            </div>
-          ))}
+          {suppliers.map((s: any) => {
+            const purchases = storage.getPurchaseHistory().filter(b => b.supplierId === s.id);
+            const outstanding = purchases.reduce((sum, b) => sum + b.pendingPaise, 0);
+            return (
+              <button key={s.id} className="im-party-card" onClick={() => setSelectedSupplier(s)} style={{ textAlign: 'left', cursor: 'pointer' }}>
+                <span className="im-avatar">{s.name.slice(0, 1).toUpperCase()}</span>
+                <strong>{s.name}</strong>
+                {s.phone && <small>{s.phone}</small>}
+                <b style={{ marginTop: 'auto', color: outstanding > 0 ? '#bd4c3e' : '#1a8754' }}>
+                  {purchases.length} purchase{purchases.length !== 1 ? 's' : ''}{outstanding > 0 ? ` · ₹${(outstanding / 100).toFixed(0)} due` : ''}
+                </b>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -1839,22 +1952,10 @@ export function SuppliersWorkspace({ suppliers, save, refresh }: { suppliers: an
             <button className="im-modal-close" onClick={() => setShowModal(false)}>×</button>
             <h2>Add Supplier</h2>
             <form className="im-modal-form" onSubmit={handleSubmit}>
-              <label>
-                Name
-                <input type="text" placeholder="Supplier name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-              </label>
-              <label>
-                Phone
-                <input type="tel" placeholder="Phone number" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-              </label>
-              <label>
-                Contact Person
-                <input type="text" placeholder="Contact person name" value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} />
-              </label>
-              <label>
-                Address
-                <textarea placeholder="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })}></textarea>
-              </label>
+              <label>Name<input type="text" placeholder="Supplier name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required autoFocus /></label>
+              <label>Phone<input type="tel" placeholder="Phone number" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
+              <label>Contact Person<input type="text" placeholder="Contact person name" value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} /></label>
+              <label>Address<textarea placeholder="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })}></textarea></label>
               <button type="submit" className="im-primary" style={{ marginTop: '16px' }}>Create Supplier</button>
             </form>
           </div>
