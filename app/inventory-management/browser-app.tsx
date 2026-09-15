@@ -658,10 +658,18 @@ export function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
                 <button type="button" className="im-text-button" onClick={() => setLines([...lines, { name: '', quantity: '', unit: 'kg', price: '' }])}>+ Add line</button>
               </div>
 
-              <div className="im-bill-total" style={{ marginTop: '16px' }}>
-                <label>Paid now (₹)<input value={paid} onChange={e => setPaid(e.target.value)} type="number" min="0" step="0.01" /></label>
-                <strong>Total: {money(Math.round(total * 100))}</strong>
-                <button type="submit" className="im-primary">Post Bill →</button>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', borderTop: '1px solid var(--line)', paddingTop: '16px', marginTop: '8px' }}>
+                <label style={{ margin: 0, fontSize: '11px', fontWeight: 700, color: '#506258', display: 'flex', alignItems: 'center', gap: '10px', whiteSpace: 'nowrap' }}>
+                  Paid now (₹)
+                  <input
+                    value={paid}
+                    onChange={e => setPaid(e.target.value)}
+                    type="number" min="0" step="0.01"
+                    style={{ width: '120px', border: '1px solid var(--line)', borderRadius: '6px', padding: '8px 10px', font: '13px DM Sans, sans-serif', color: 'var(--ink)' }}
+                  />
+                </label>
+                <strong style={{ fontSize: '15px', whiteSpace: 'nowrap' }}>Total: {money(Math.round(total * 100))}</strong>
+                <button type="submit" className="im-primary" style={{ whiteSpace: 'nowrap' }}>Post Bill →</button>
               </div>
             </form>
           </div>
