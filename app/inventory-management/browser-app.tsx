@@ -484,39 +484,27 @@ export function ItemsWorkspace({ items, suppliers, customers, save, refresh }: a
 }
 
 export function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
-  type Stage = 'history' | 'select-supplier' | 'bill';
-  const [stage, setStage] = useState<Stage>('history');
-  const [selectedSupplier, setSelectedSupplier] = useState<any>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [supplierId, setSupplierId] = useState('');
   const [lines, setLines] = useState([{ name: '', quantity: '', unit: 'kg', price: '' }]);
   const [paid, setPaid] = useState('0');
   const [date, setDate] = useState(today());
   const [expandedBillId, setExpandedBillId] = useState<string | null>(null);
-  const [showSupplierModal, setShowSupplierModal] = useState(false);
-  const [supplierForm, setSupplierForm] = useState({ name: '', phone: '', contactPerson: '', address: '' });
-  const [supplierSearch, setSupplierSearch] = useState('');
 
   const total = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.price || 0), 0);
   const purchaseHistory = storage.getPurchaseHistory();
-  const filteredSuppliers = suppliers.filter((s: any) => s.name.toLowerCase().includes(supplierSearch.toLowerCase()));
 
-  const handleAddSupplier = (e: FormEvent) => {
-    e.preventDefault();
-    if (!supplierForm.name.trim()) return;
-    save(() => {
-      const id = storage.addMaster('supplier', supplierForm);
-      const newSupplier = { id, ...supplierForm };
-      setSelectedSupplier(newSupplier);
-      setSupplierForm({ name: '', phone: '', contactPerson: '', address: '' });
-      setShowSupplierModal(false);
-      setStage('bill');
-      refresh();
-    });
-  };
+  function resetModal() {
+    setSupplierId('');
+    setLines([{ name: '', quantity: '', unit: 'kg', price: '' }]);
+    setPaid('0');
+    setDate(today());
+    setShowModal(false);
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!selectedSupplier || !total) return;
-
+    if (!supplierId || !total) return;
     const valid = lines.filter(line => line.name.trim() && Number(line.quantity) > 0);
     if (!valid.length) return;
 
@@ -524,245 +512,161 @@ export function PurchaseWorkspace({ suppliers, items, save, refresh }: any) {
     for (const line of valid) {
       let found = items.find((item: any) => item.name.toLowerCase() === line.name.trim().toLowerCase());
       if (!found) {
-        const id = storage.addMaster('item', {
-          name: line.name.trim(),
-          type: 'RAW_MATERIAL',
-          baseUnit: line.unit,
-          reorderLevel: 0
-        });
+        const id = storage.addMaster('item', { name: line.name.trim(), type: 'RAW_MATERIAL', baseUnit: line.unit, reorderLevel: 0 });
         found = { id, name: line.name.trim() };
       }
-      resolved.push({
-        itemId: found.id,
-        quantity: Number(line.quantity),
-        unit: line.unit,
-        unitPricePaise: Math.round(Number(line.price) * 100)
-      });
+      resolved.push({ itemId: found.id, quantity: Number(line.quantity), unit: line.unit, unitPricePaise: Math.round(Number(line.price) * 100) });
     }
 
     save(() => {
       storage.postPurchase({
-        date,
-        supplierId: selectedSupplier.id,
-        billNumber: '',
-        lines: resolved,
+        date, supplierId, billNumber: '', lines: resolved,
         billAmountPaise: Math.round(total * 100),
         paidAmountPaise: Math.round(Number(paid || 0) * 100),
         note: ''
       });
     });
-
-    setLines([{ name: '', quantity: '', unit: 'kg', price: '' }]);
-    setPaid('0');
-    setSelectedSupplier(null);
-    setStage('history');
+    resetModal();
   }
 
-  if (stage === 'history') {
-    // Group purchases by date
-    const byDate: Record<string, typeof purchaseHistory> = {};
-    for (const bill of purchaseHistory) {
-      if (!byDate[bill.date]) byDate[bill.date] = [];
-      byDate[bill.date].push(bill);
-    }
-    const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
-
-    return (
-      <div className="im-form">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
-          <div>
-            <p className="im-kicker">PURCHASES</p>
-            <h2 style={{ margin: 0 }}>Purchase History</h2>
-          </div>
-          <button className="im-primary" onClick={() => { setStage('select-supplier'); setSupplierSearch(''); }}>+ New Purchase</button>
-        </div>
-
-        {purchaseHistory.length === 0 ? (
-          <div className="im-empty" style={{ margin: '40px 0', textAlign: 'center' }}>
-            <b>No purchases yet</b>
-            <p>Click "+ New Purchase" above to record your first one</p>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gap: '24px' }}>
-            {dates.map(date => {
-              const bills = byDate[date];
-              const dayTotal = bills.reduce((s, b) => s + b.billAmountPaise, 0);
-              const dayPending = bills.reduce((s, b) => s + b.pendingPaise, 0);
-              return (
-                <div key={date}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '2px solid var(--line)', paddingBottom: '8px', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-                      {new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-                    </span>
-                    <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                      {money(dayTotal)}{dayPending > 0 ? ` · ₹${(dayPending / 100).toFixed(0)} due` : ''}
-                    </span>
-                  </div>
-                  <table style={{ width: '100%', fontSize: '12px' }}>
-                    <tbody>
-                      {bills.map(bill => (
-                        <React.Fragment key={bill.id}>
-                          <tr onClick={() => setExpandedBillId(expandedBillId === bill.id ? null : bill.id)} style={{ cursor: 'pointer', background: expandedBillId === bill.id ? '#f9faf7' : 'transparent' }}>
-                            <td style={{ paddingLeft: '4px' }}><b>{bill.supplierName}</b></td>
-                            <td style={{ color: 'var(--muted)' }}>{bill.lineCount} item(s)</td>
-                            <td>{money(bill.billAmountPaise)}</td>
-                            <td>{money(bill.paidAmountPaise)} paid</td>
-                            <td style={{ fontWeight: 700, color: bill.pendingPaise > 0 ? '#bd4c3e' : '#1a8754' }}>
-                              {bill.pendingPaise > 0 ? `${money(bill.pendingPaise)} due` : '✓ Settled'}
-                            </td>
-                          </tr>
-                          {expandedBillId === bill.id && (
-                            <tr style={{ background: '#f9faf7' }}>
-                              <td colSpan={5} style={{ padding: '10px 12px', fontSize: '11px' }}>
-                                {bill.lines.map((line, idx) => (
-                                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: idx > 0 ? '1px solid #edf0eb' : 'none' }}>
-                                    <span><b>{line.itemName}</b> · {line.quantity} {line.unit}</span>
-                                    <span>{money(line.totalPaise)}</span>
-                                  </div>
-                                ))}
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
+  // Group purchases by date
+  const byDate: Record<string, typeof purchaseHistory> = {};
+  for (const bill of purchaseHistory) {
+    if (!byDate[bill.date]) byDate[bill.date] = [];
+    byDate[bill.date].push(bill);
   }
-
-  if (stage === 'select-supplier') {
-    return (
-      <div className="im-form">
-        <button type="button" onClick={() => setStage('history')} className="im-secondary" style={{ marginBottom: '24px' }}>← Cancel</button>
-        <h2>Select Supplier</h2>
-
-        {suppliers.length > 0 && (
-          <input
-            type="text"
-            placeholder="Search suppliers..."
-            value={supplierSearch}
-            onChange={(e) => setSupplierSearch(e.target.value)}
-            style={{ width: '100%', marginBottom: '16px', border: '1px solid var(--line)', borderRadius: '6px', padding: '10px', fontSize: '13px' }}
-          />
-        )}
-
-        {suppliers.length === 0 ? (
-          <div className="im-empty" style={{ margin: '40px 0', textAlign: 'center' }}>
-            <b>No suppliers yet</b>
-            <p>Create one to start recording purchases</p>
-          </div>
-        ) : filteredSuppliers.length === 0 ? (
-          <div className="im-empty" style={{ margin: '40px 0', textAlign: 'center' }}>
-            <b>No suppliers found</b>
-            <p>Try a different search</p>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gap: '8px', marginBottom: '24px' }}>
-            {filteredSuppliers.map((s: any) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => { setSelectedSupplier(s); setStage('bill'); }}
-                style={{
-                  textAlign: 'left',
-                  background: '#fff',
-                  border: '1px solid var(--line)',
-                  borderRadius: '8px',
-                  padding: '12px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px'
-                }}
-              >
-                <span style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#e5f0d6', display: 'grid', placeItems: 'center', fontWeight: 700, color: '#143d32' }}>
-                  {s.name.slice(0, 1).toUpperCase()}
-                </span>
-                <div>
-                  <div style={{ fontWeight: 700 }}>{s.name}</div>
-                  {s.phone && <div style={{ fontSize: '12px', color: 'var(--muted)' }}>{s.phone}</div>}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        <button
-          type="button"
-          className="im-primary"
-          onClick={() => setShowSupplierModal(true)}
-          style={{ width: '100%' }}
-        >
-          + Add Supplier
-        </button>
-
-        {showSupplierModal && (
-          <div className="im-modal-backdrop">
-            <div className="im-modal">
-              <button className="im-modal-close" onClick={() => setShowSupplierModal(false)}>×</button>
-              <h2>Add Supplier</h2>
-              <form className="im-modal-form" onSubmit={handleAddSupplier}>
-                <label>Name<input type="text" placeholder="Supplier name" value={supplierForm.name} onChange={(e) => setSupplierForm({ ...supplierForm, name: e.target.value })} required autoFocus /></label>
-                <label>Phone<input type="tel" placeholder="Phone" value={supplierForm.phone} onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })} /></label>
-                <label>Contact Person<input type="text" placeholder="Contact person" value={supplierForm.contactPerson} onChange={(e) => setSupplierForm({ ...supplierForm, contactPerson: e.target.value })} /></label>
-                <label>Address<textarea placeholder="Address" value={supplierForm.address} onChange={(e) => setSupplierForm({ ...supplierForm, address: e.target.value })}></textarea></label>
-                <button type="submit" className="im-primary" style={{ marginTop: '16px' }}>Create Supplier</button>
-              </form>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
+  const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
 
   return (
     <div className="im-form">
-      <div style={{ background: '#e7f0d7', border: '1px solid #d2e6ac', borderRadius: '12px', padding: '12px 16px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 700 }}>● {selectedSupplier.name}</span>
-        <button type="button" onClick={() => setStage('select-supplier')} className="im-secondary">Change</button>
-      </div>
-
-      <div className="im-date-strip" style={{ marginBottom: '24px' }}>
-        <button onClick={() => { const d = new Date(date); d.setDate(d.getDate() - 1); setDate(d.toISOString().slice(0, 10)); }}>← Previous</button>
-        <label><span>Date</span><input type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
-        <button onClick={() => { const d = new Date(date); d.setDate(d.getDate() + 1); setDate(d.toISOString().slice(0, 10)); }}>Next →</button>
-      </div>
-
-      <h2>Record purchase</h2>
-
-      <div className="im-line-head">
-        <span>Item</span><span>Qty</span><span>Unit</span><span>Rate ₹</span><span>Total</span>
-      </div>
-
-      {lines.map((line, idx) => (
-        <div className="im-purchase-line" key={idx}>
-          <input list="raw-items" value={line.name} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, name: e.target.value } : l))} placeholder="Item name" required />
-          <input value={line.quantity} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: e.target.value } : l))} type="number" min="0.01" step="0.01" required />
-          <select value={line.unit} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, unit: e.target.value } : l))}>
-            <option>kg</option><option>litre</option><option>piece</option>
-          </select>
-          <input value={line.price} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, price: e.target.value } : l))} type="number" min="0" step="0.01" required />
-          <b>{money(Math.round(Number(line.quantity || 0) * Number(line.price || 0) * 100))}</b>
-          {lines.length > 1 && (<button type="button" className="im-remove" onClick={() => setLines(lines.filter((_, i) => i !== idx))}>×</button>)}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
+        <div>
+          <p className="im-kicker">PURCHASES</p>
+          <h2 style={{ margin: 0 }}>Purchase History</h2>
         </div>
-      ))}
-      <datalist id="raw-items">
-        {items.map((item: typeof items[0]) => <option value={item.name} key={item.id} />)}
-      </datalist>
-
-      <button type="button" className="im-text-button" onClick={() => setLines([...lines, { name: '', quantity: '', unit: 'kg', price: '' }])}>+ Add line</button>
-
-      <div className="im-bill-total">
-        <label>Paid now (₹)<input value={paid} onChange={e => setPaid(e.target.value)} type="number" min="0" step="0.01" /></label>
-        <strong>Total: {money(Math.round(total * 100))}</strong>
-        <button onClick={submit}>Post Bill →</button>
+        <button className="im-primary" onClick={() => setShowModal(true)}>+ New Purchase</button>
       </div>
+
+      {purchaseHistory.length === 0 ? (
+        <div className="im-empty" style={{ margin: '40px 0', textAlign: 'center' }}>
+          <b>No purchases yet</b>
+          <p>Click "+ New Purchase" above to record your first one</p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: '24px' }}>
+          {dates.map(d => {
+            const bills = byDate[d];
+            const dayTotal = bills.reduce((s, b) => s + b.billAmountPaise, 0);
+            const dayPending = bills.reduce((s, b) => s + b.pendingPaise, 0);
+            return (
+              <div key={d}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '2px solid var(--line)', paddingBottom: '8px', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+                    {new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                  <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                    {money(dayTotal)}{dayPending > 0 ? ` · ₹${(dayPending / 100).toFixed(0)} due` : ''}
+                  </span>
+                </div>
+                <table style={{ width: '100%', fontSize: '12px' }}>
+                  <tbody>
+                    {bills.map(bill => (
+                      <React.Fragment key={bill.id}>
+                        <tr onClick={() => setExpandedBillId(expandedBillId === bill.id ? null : bill.id)} style={{ cursor: 'pointer', background: expandedBillId === bill.id ? '#f9faf7' : 'transparent' }}>
+                          <td style={{ paddingLeft: '4px' }}><b>{bill.supplierName}</b></td>
+                          <td style={{ color: 'var(--muted)' }}>{bill.lineCount} item(s)</td>
+                          <td>{money(bill.billAmountPaise)}</td>
+                          <td>{money(bill.paidAmountPaise)} paid</td>
+                          <td style={{ fontWeight: 700, color: bill.pendingPaise > 0 ? '#bd4c3e' : '#1a8754' }}>
+                            {bill.pendingPaise > 0 ? `${money(bill.pendingPaise)} due` : '✓ Settled'}
+                          </td>
+                        </tr>
+                        {expandedBillId === bill.id && (
+                          <tr style={{ background: '#f9faf7' }}>
+                            <td colSpan={5} style={{ padding: '10px 12px', fontSize: '11px' }}>
+                              {bill.lines.map((line, idx) => (
+                                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: idx > 0 ? '1px solid #edf0eb' : 'none' }}>
+                                  <span><b>{line.itemName}</b> · {line.quantity} {line.unit}</span>
+                                  <span>{money(line.totalPaise)}</span>
+                                </div>
+                              ))}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {showModal && (
+        <div className="im-modal-backdrop">
+          <div className="im-modal" style={{ width: 'min(100%, 600px)' }}>
+            <button className="im-modal-close" onClick={resetModal}>×</button>
+            <h2>New Purchase</h2>
+            <form onSubmit={submit} className="im-modal-form">
+
+              <label>
+                Supplier
+                <select
+                  value={supplierId}
+                  onChange={e => setSupplierId(e.target.value)}
+                  required
+                  style={{ display: 'block', width: '100%', marginTop: '6px', border: '1px solid var(--line)', borderRadius: '6px', padding: '10px 11px', font: '13px DM Sans, sans-serif', color: supplierId ? 'var(--ink)' : 'var(--muted)', background: '#fefdfb' }}
+                >
+                  <option value="">— Choose Supplier —</option>
+                  {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}{s.phone ? ` · ${s.phone}` : ''}</option>)}
+                </select>
+                {suppliers.length === 0 && (
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: 'var(--muted)' }}>
+                    No suppliers yet. <a href="/inventory-management/suppliers" style={{ color: 'var(--coffee)', fontWeight: 700 }}>Go to Suppliers page</a> to add one first.
+                  </p>
+                )}
+                {suppliers.length > 0 && (
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: 'var(--muted)' }}>
+                    Supplier not listed? <a href="/inventory-management/suppliers" style={{ color: 'var(--coffee)', fontWeight: 700 }}>Go to Suppliers page</a> to add them.
+                  </p>
+                )}
+              </label>
+
+              <label>
+                Date
+                <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ display: 'block', width: '100%', marginTop: '6px', border: '1px solid var(--line)', borderRadius: '6px', padding: '10px 11px', font: '13px DM Sans, sans-serif' }} />
+              </label>
+
+              <div style={{ marginTop: '16px' }}>
+                <div className="im-line-head"><span>Item</span><span>Qty</span><span>Unit</span><span>Rate ₹</span><span>Total</span></div>
+                {lines.map((line, idx) => (
+                  <div className="im-purchase-line" key={idx}>
+                    <input list="raw-items-modal" value={line.name} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, name: e.target.value } : l))} placeholder="Item name" required />
+                    <input value={line.quantity} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: e.target.value } : l))} type="number" min="0.01" step="0.01" required />
+                    <select value={line.unit} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, unit: e.target.value } : l))}>
+                      <option>kg</option><option>litre</option><option>piece</option>
+                    </select>
+                    <input value={line.price} onChange={e => setLines(lines.map((l, i) => i === idx ? { ...l, price: e.target.value } : l))} type="number" min="0" step="0.01" required />
+                    <b>{money(Math.round(Number(line.quantity || 0) * Number(line.price || 0) * 100))}</b>
+                    {lines.length > 1 && <button type="button" className="im-remove" onClick={() => setLines(lines.filter((_, i) => i !== idx))}>×</button>}
+                  </div>
+                ))}
+                <datalist id="raw-items-modal">
+                  {items.map((item: any) => <option value={item.name} key={item.id} />)}
+                </datalist>
+                <button type="button" className="im-text-button" onClick={() => setLines([...lines, { name: '', quantity: '', unit: 'kg', price: '' }])}>+ Add line</button>
+              </div>
+
+              <div className="im-bill-total" style={{ marginTop: '16px' }}>
+                <label>Paid now (₹)<input value={paid} onChange={e => setPaid(e.target.value)} type="number" min="0" step="0.01" /></label>
+                <strong>Total: {money(Math.round(total * 100))}</strong>
+                <button type="submit" className="im-primary">Post Bill →</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
