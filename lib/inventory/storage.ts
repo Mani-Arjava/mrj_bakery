@@ -89,6 +89,12 @@ export function addMaster(kind: 'supplier' | 'customer' | 'item', input: Record<
   return id;
 }
 
+export function updateItemReorderLevel(itemId: string, reorderLevel: number) {
+  const data = getData();
+  const item = data.items.find(i => i.id === itemId);
+  if (item) { item.reorderLevel = reorderLevel; saveData(data); }
+}
+
 export function getMasterData() {
   const data = getData();
   return {

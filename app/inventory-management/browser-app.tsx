@@ -361,19 +361,10 @@ export function Dashboard({ data, onNavigate, hasData }: { data: DashboardData; 
   );
 }
 
-export function ItemsWorkspace({ items, suppliers, customers, save, refresh }: any) {
-  const [tab, setTab] = useState<'customers' | 'items'>('items');
-  const [customerForm, setCustomerForm] = useState({ name: '', phone: '', contactPerson: '', address: '' });
-  const [itemForm, setItemForm] = useState({ name: '', type: 'RAW_MATERIAL' as 'RAW_MATERIAL' | 'FINISHED_GOOD', baseUnit: 'kg', reorderLevel: '0' });
-
-  const handleAddCustomer = (e: FormEvent) => {
-    e.preventDefault();
-    if (!customerForm.name.trim()) return;
-    save(() => {
-      storage.addMaster('customer', customerForm);
-    });
-    setCustomerForm({ name: '', phone: '', contactPerson: '', address: '' });
-  };
+export function ItemsWorkspace({ items, save, refresh }: any) {
+  const [itemForm, setItemForm] = useState({ name: '', baseUnit: 'kg' });
+  const [editingReorder, setEditingReorder] = useState<string | null>(null);
+  const [reorderValue, setReorderValue] = useState('');
 
   const handleAddItem = (e: FormEvent) => {
     e.preventDefault();
@@ -381,104 +372,85 @@ export function ItemsWorkspace({ items, suppliers, customers, save, refresh }: a
     save(() => {
       storage.addMaster('item', {
         name: itemForm.name,
-        type: itemForm.type,
+        type: 'RAW_MATERIAL',
         baseUnit: itemForm.baseUnit,
-        reorderLevel: Number(itemForm.reorderLevel)
+        reorderLevel: 0
       });
     });
-    setItemForm({ name: '', type: 'RAW_MATERIAL', baseUnit: 'kg', reorderLevel: '0' });
+    setItemForm({ name: '', baseUnit: 'kg' });
+  };
+
+  const saveReorder = (itemId: string) => {
+    const val = Number(reorderValue);
+    if (isNaN(val) || val < 0) return;
+    save(() => storage.updateItemReorderLevel(itemId, val));
+    setEditingReorder(null);
   };
 
   return (
     <div className="im-form">
-      <div className="im-tabs">
-        <button className={tab === 'customers' ? 'selected' : ''} onClick={() => setTab('customers')}>Customers</button>
-        <button className={tab === 'items' ? 'selected' : ''} onClick={() => setTab('items')}>Items</button>
-      </div>
-
-      {tab === 'customers' && (
-        <>
-          <p className="im-kicker">CUSTOMER DIRECTORY</p>
-          <h2>Manage customers</h2>
-          {customers.length === 0 ? (
-            <div className="im-empty"><b>No customers yet</b><p>Create your first customer below.</p></div>
-          ) : (
-            <div className="im-party-cards" style={{ marginTop: '24px' }}>
-              {customers.map((c: any) => (
-                <div className="im-party-card" key={c.id} style={{ cursor: 'default', backgroundColor: '#f9faf7' }}>
-                  <span>{c.name.slice(0, 1).toUpperCase()}</span>
-                  <b>{c.name}</b>
-                  {c.phone && <small>{c.phone}</small>}
-                  {c.contactPerson && <small>{c.contactPerson}</small>}
-                  {c.address && <small>{c.address}</small>}
-                </div>
-              ))}
-            </div>
-          )}
-          <form onSubmit={handleAddCustomer} style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--line)' }}>
-            <p className="im-kicker">ADD CUSTOMER</p>
-            <label>Name<input value={customerForm.name} onChange={e => setCustomerForm({ ...customerForm, name: e.target.value })} required /></label>
-            <div className="im-three">
-              <label>Phone<input value={customerForm.phone} onChange={e => setCustomerForm({ ...customerForm, phone: e.target.value })} inputMode="tel" /></label>
-              <label>Contact Person<input value={customerForm.contactPerson} onChange={e => setCustomerForm({ ...customerForm, contactPerson: e.target.value })} /></label>
-              <label></label>
-            </div>
-            <label>Address<textarea value={customerForm.address} onChange={e => setCustomerForm({ ...customerForm, address: e.target.value })} rows={2} /></label>
-            <button>Add Customer →</button>
-          </form>
-        </>
-      )}
-
-      {tab === 'items' && (
-        <>
-          <p className="im-kicker">INVENTORY ITEMS</p>
-          <h2>Manage items</h2>
-          {items.length === 0 ? (
-            <div className="im-empty"><b>No items yet</b><p>Create your first item below.</p></div>
-          ) : (
-            <table style={{ marginTop: '24px' }}>
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Type</th>
-                  <th>Unit</th>
-                  <th>Reorder Level</th>
-                  <th>Stock Qty</th>
+      {items.length === 0 ? (
+        <div className="im-empty"><b>No items yet</b><p>Add your first item below.</p></div>
+      ) : (
+        <table style={{ marginTop: '8px' }}>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Unit</th>
+              <th>Reorder Level</th>
+              <th>Stock Qty</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item: any) => {
+              const bal = storage.getStockBalance(item.id);
+              const isLow = bal.quantity <= item.reorderLevel && item.reorderLevel > 0;
+              return (
+                <tr key={item.id}>
+                  <td><b>{item.name}</b></td>
+                  <td style={{ color: 'var(--muted)' }}>{item.baseUnit}</td>
+                  <td>
+                    {editingReorder === item.id ? (
+                      <span style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <input
+                          type="number" min="0" autoFocus
+                          value={reorderValue}
+                          onChange={e => setReorderValue(e.target.value)}
+                          onBlur={() => saveReorder(item.id)}
+                          onKeyDown={e => { if (e.key === 'Enter') saveReorder(item.id); if (e.key === 'Escape') setEditingReorder(null); }}
+                          style={{ width: '70px', border: '1px solid var(--line)', borderRadius: '5px', padding: '4px 8px', font: '13px DM Sans, sans-serif' }}
+                        />
+                      </span>
+                    ) : (
+                      <span
+                        onClick={() => { setEditingReorder(item.id); setReorderValue(String(item.reorderLevel)); }}
+                        style={{ cursor: 'pointer', color: 'var(--muted)', borderBottom: '1px dashed var(--line)', paddingBottom: '1px' }}
+                        title="Click to edit"
+                      >
+                        {item.reorderLevel}
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ fontWeight: 600, color: isLow ? '#bd4c3e' : 'var(--ink)' }}>
+                    {bal.quantity.toFixed(2)}{isLow ? ' ⚠' : ''}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {items.map((i: any) => {
-                  const bal = storage.getStockBalance(i.id);
-                  return (
-                    <tr key={i.id}>
-                      <td>{i.name}</td>
-                      <td>{i.type === 'RAW_MATERIAL' ? 'Raw Material' : 'Finished Good'}</td>
-                      <td>{i.baseUnit}</td>
-                      <td>{i.reorderLevel}</td>
-                      <td>{bal.quantity.toFixed(2)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-          <form onSubmit={handleAddItem} style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--line)' }}>
-            <p className="im-kicker">ADD ITEM</p>
-            <div className="im-three">
-              <label>Item Name<input value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e.target.value })} required /></label>
-              <label>Type<select value={itemForm.type} onChange={e => setItemForm({ ...itemForm, type: e.target.value as any })}>
-                <option value="RAW_MATERIAL">Raw Material</option>
-                <option value="FINISHED_GOOD">Finished Good</option>
-              </select></label>
-              <label>Unit<select value={itemForm.baseUnit} onChange={e => setItemForm({ ...itemForm, baseUnit: e.target.value })}>
-                <option>kg</option><option>litre</option><option>piece</option>
-              </select></label>
-            </div>
-            <label>Reorder Level<input value={itemForm.reorderLevel} onChange={e => setItemForm({ ...itemForm, reorderLevel: e.target.value })} type="number" min="0" /></label>
-            <button>Add Item →</button>
-          </form>
-        </>
+              );
+            })}
+          </tbody>
+        </table>
       )}
+
+      <form onSubmit={handleAddItem} style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--line)' }}>
+        <p className="im-kicker">ADD ITEM</p>
+        <div className="im-two">
+          <label>Item Name<input value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e.target.value })} required placeholder="e.g. Maida" /></label>
+          <label>Unit<select value={itemForm.baseUnit} onChange={e => setItemForm({ ...itemForm, baseUnit: e.target.value })}>
+            <option>kg</option><option>litre</option><option>piece</option>
+          </select></label>
+        </div>
+        <button style={{ marginTop: '8px' }}>Add Item →</button>
+      </form>
     </div>
   );
 }
