@@ -42,6 +42,38 @@ export function addItem(input: Omit<InventoryItem, 'id' | 'quantity'> & { quanti
   return item;
 }
 
+export function updateSupplier(supplierId: string, updates: Omit<Supplier, 'id'>) {
+  const data = getData();
+  const supplier = data.suppliers.find((candidate) => candidate.id === supplierId);
+  if (!supplier) throw new Error('Supplier not found.');
+  Object.assign(supplier, updates);
+  data.purchases.forEach((purchase) => { if (purchase.supplierId === supplierId) purchase.supplierName = supplier.name; });
+  save(data);
+}
+
+export function deleteSupplier(supplierId: string) {
+  const data = getData();
+  if (data.purchases.some((purchase) => purchase.supplierId === supplierId)) throw new Error('This supplier has purchase history and cannot be deleted.');
+  data.suppliers = data.suppliers.filter((supplier) => supplier.id !== supplierId);
+  save(data);
+}
+
+export function updateItem(itemId: string, updates: Omit<InventoryItem, 'id' | 'quantity'>) {
+  const data = getData();
+  const item = data.items.find((candidate) => candidate.id === itemId);
+  if (!item) throw new Error('Item not found.');
+  Object.assign(item, updates);
+  data.purchases.forEach((purchase) => purchase.lines.forEach((line) => { if (line.itemId === itemId) { line.itemName = item.name; } }));
+  save(data);
+}
+
+export function deleteItem(itemId: string) {
+  const data = getData();
+  if (data.purchases.some((purchase) => purchase.lines.some((line) => line.itemId === itemId))) throw new Error('This item has purchase history and cannot be deleted.');
+  data.items = data.items.filter((item) => item.id !== itemId);
+  save(data);
+}
+
 export function postPurchase(input: Omit<Purchase, 'id' | 'supplierName'>) {
   const data = getData();
   const supplier = data.suppliers.find((candidate) => candidate.id === input.supplierId);
@@ -54,6 +86,33 @@ export function postPurchase(input: Omit<Purchase, 'id' | 'supplierName'>) {
   }
   save(data);
   return purchase;
+}
+
+function changeStock(data: InventoryData, lines: PurchaseLine[], direction: 1 | -1) {
+  for (const line of lines) {
+    const item = data.items.find((candidate) => candidate.id === line.itemId);
+    if (item) item.quantity += line.quantity * direction;
+  }
+}
+
+export function updatePurchase(purchaseId: string, input: Omit<Purchase, 'id' | 'supplierName'>) {
+  const data = getData();
+  const purchase = data.purchases.find((candidate) => candidate.id === purchaseId);
+  const supplier = data.suppliers.find((candidate) => candidate.id === input.supplierId);
+  if (!purchase || !supplier) throw new Error('Purchase or supplier not found.');
+  changeStock(data, purchase.lines, -1);
+  changeStock(data, input.lines, 1);
+  Object.assign(purchase, { ...input, supplierName: supplier.name });
+  save(data);
+}
+
+export function deletePurchase(purchaseId: string) {
+  const data = getData();
+  const purchase = data.purchases.find((candidate) => candidate.id === purchaseId);
+  if (!purchase) throw new Error('Purchase not found.');
+  changeStock(data, purchase.lines, -1);
+  data.purchases = data.purchases.filter((candidate) => candidate.id !== purchaseId);
+  save(data);
 }
 
 export function getSupplierSummary(supplierId: string) {
