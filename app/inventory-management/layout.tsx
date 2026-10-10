@@ -43,8 +43,18 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
     return <div className="im-login"><div className="im-login-card"><p className="im-kicker">MRJ BEST BAKERY</p><h1>Welcome back</h1><p>Sign in to access your inventory</p><form onSubmit={handleLogin}><label>Username<input type="text" placeholder="Enter username" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus required /></label><label>Password<div className="im-password-wrapper"><input type={showPassword ? 'text' : 'password'} placeholder="Enter password" value={password} onChange={(e) => setPassword(e.target.value)} required /><button type="button" className="im-password-toggle" onClick={() => setShowPassword(!showPassword)} title={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>{loginError && <div style={{ color: '#a43932', fontSize: '12px', marginTop: '8px' }}>{loginError}</div>}<button type="submit">Sign in →</button></form><small>Demo: imran123 / mrj@2026</small></div></div>;
   }
 
-  const navigation = [{ href: '/inventory-management/suppliers', label: 'Suppliers' }, { href: '/inventory-management/items', label: 'Items' }, { href: '/inventory-management/purchases', label: 'Purchases' }];
-  const currentView = pathname.endsWith('/suppliers') ? 'Suppliers' : pathname.endsWith('/items') ? 'Items' : 'Purchases';
+  const navigation = [
+    { href: '/inventory-management/items', label: 'Items', group: 'SETUP' },
+    { href: '/inventory-management/suppliers', label: 'Suppliers', group: 'SETUP' },
+    { href: '/inventory-management/purchases', label: 'Purchases', group: 'OPERATIONS' },
+    { href: '/inventory-management/products', label: 'Products', group: 'OPERATIONS' },
+    { href: '/inventory-management/production', label: 'Production', group: 'OPERATIONS' },
+    { href: '/inventory-management/customers', label: 'Customers', group: 'OPERATIONS' },
+    { href: '/inventory-management/billing', label: 'Billing', group: 'OPERATIONS' }
+  ];
 
-  return <div className="im-app"><aside className="im-sidebar"><button className="im-brand" onClick={() => router.push('/inventory-management/purchases')}><span>MRJ</span><small>INVENTORY</small></button><span className="im-side-label">WORKSPACE</span>{navigation.map((item) => <button key={item.href} className={pathname === item.href || (item.label === 'Purchases' && pathname === '/inventory-management') ? 'active' : ''} onClick={() => router.push(item.href)}>{item.label}</button>)}<div className="im-sidebar-bottom"><span>Simple inventory</span><button className="im-logout-btn" onClick={() => { localStorage.removeItem('bakery_auth'); window.location.reload(); }}>Sign out</button></div></aside><section className="im-workspace"><header className="im-topbar"><div><p className="im-kicker">INVENTORY CONTROL</p><h1>{currentView}</h1></div><span className="im-date" suppressHydrationWarning>{new Intl.DateTimeFormat('en-IN', { dateStyle: 'full' }).format(new Date())}</span></header>{children}</section></div>;
+  const groups = ['SETUP', 'OPERATIONS'];
+  const currentView = navigation.find(n => pathname === n.href)?.label || 'Dashboard';
+
+  return <div className="im-app"><aside className="im-sidebar"><button className="im-brand" onClick={() => router.push('/inventory-management/purchases')}><span>MRJ</span><small>BAKERY</small></button>{groups.map((group) => <div key={group}><span className="im-side-label">{group}</span>{navigation.filter(n => n.group === group).map((item) => <button key={item.href} className={pathname === item.href ? 'active' : ''} onClick={() => router.push(item.href)}>{item.label}</button>)}</div>)}<div className="im-sidebar-bottom"><span>Bakery management</span><button className="im-logout-btn" onClick={() => { localStorage.removeItem('bakery_auth'); window.location.reload(); }}>Sign out</button></div></aside><section className="im-workspace"><header className="im-topbar"><div><p className="im-kicker">MRJ BAKERY</p><h1>{currentView}</h1></div><span className="im-date" suppressHydrationWarning>{new Intl.DateTimeFormat('en-IN', { dateStyle: 'full' }).format(new Date())}</span></header>{children}</section></div>;
 }
