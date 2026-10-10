@@ -254,44 +254,45 @@ export function BillingWorkspace() {
   }
 
   function generateBillContent(invoice: any) {
-    const width = 45;
-    const line = '═'.repeat(width);
-    const dash = '─'.repeat(width);
+    const sep = '═════════════════════════════════════';
+    const dash = '─────────────────────────────────────';
 
-    const formatHeader = (text: string) => text.padEnd(width);
-    const formatRow = (desc: string, qty: number, price: number, total: number) => {
-      const descPart = desc.substring(0, 18).padEnd(18);
-      const qtyPart = String(qty).padStart(3);
-      const pricePart = `₹${(price / 100).toFixed(2)}`.padStart(10);
-      const totalPart = `₹${(total / 100).toFixed(2)}`.padStart(10);
-      return `${descPart} ${qtyPart} ${pricePart} ${totalPart}`.substring(0, width);
-    };
-
-    return `${line}
+    let content = `${sep}
      MRJ BEST BAKERY
    12A Main Bazaar St.
    New Aayakudi, Palani
   Phone: +91-8248395591
-${line}
+${sep}
 
 Bill #: ${invoice.id.slice(0, 8).toUpperCase()}  ${new Date(invoice.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
 Date: ${invoice.date}
 Customer: ${invoice.customerName}
 
-${formatHeader('Item             Qty      Price    Total')}
+ITEM              QTY    PRICE      TOTAL
 ${dash}
-${invoice.lines.map((l: any) => formatRow(l.productName, l.quantityPackets, l.pricePerPacketPaise, l.totalPaise)).join('\n')}
-${dash}
+`;
+
+    invoice.lines.forEach((l: any) => {
+      const name = l.productName.substring(0, 16).padEnd(16);
+      const qty = String(l.quantityPackets).padStart(3);
+      const price = `₹${(l.pricePerPacketPaise / 100).toFixed(2)}`.padStart(10);
+      const total = `₹${(l.totalPaise / 100).toFixed(2)}`.padStart(10);
+      content += `${name} ${qty} ${price} ${total}\n`;
+    });
+
+    content += `${dash}
 Total Items: ${String(invoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0))}
-${'─'.repeat(width)}
+${'─────────────────────────────────────'}
 Subtotal:                    ₹${(invoice.totalPaise / 100).toFixed(2).padStart(9)}
 ${dash}
 Amount Paid:                 ₹${(invoice.paidPaise / 100).toFixed(2).padStart(9)}
 Outstanding:                 ₹${(invoice.outstandingPaise / 100).toFixed(2).padStart(9)}
-${line}
+${sep}
 
       Thank you for your purchase!
-${line}`;
+${sep}`;
+
+    return content;
   }
 
   if (stage === 'select-customer') {

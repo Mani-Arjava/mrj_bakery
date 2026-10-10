@@ -14,7 +14,7 @@ table td{padding:12px 8px}
 table td:nth-child(2),table td:nth-child(3),table td:nth-child(4){text-align:right}
 table th:nth-child(1){min-width:180px}
 table td select,table td input{width:100%;min-width:100px}
-.bill-preview{font-family:'Courier New',monospace;white-space:pre-wrap;font-size:11px;line-height:1.5;width:80mm;margin:0 auto;background:#fff;padding:16px;border:1px solid var(--line);border-radius:4px;color:#000;font-weight:500}.im-sidebar button:not(.im-brand,.im-logout-btn){display:block;width:100%;text-align:left;padding:12px 14px;margin:4px 0;background:transparent;border:none;color:var(--paper);font-size:13px;cursor:pointer;transition:all 0.2s}
+.bill-preview{font-family:'Courier New',monospace;white-space:pre-wrap;font-size:12px;line-height:1.6;width:80mm;margin:0 auto;background:#fff;padding:16px;border:1px solid var(--line);border-radius:4px;color:#1a1a1a;font-weight:600;letter-spacing:0.3px}.im-sidebar button:not(.im-brand,.im-logout-btn){display:block;width:100%;text-align:left;padding:12px 14px;margin:4px 0;background:transparent;border:none;color:var(--paper);font-size:13px;cursor:pointer;transition:all 0.2s}
 .im-sidebar button:not(.im-brand,.im-logout-btn):hover{background:rgba(255,255,255,0.1)}
 .im-sidebar button.active{background:rgba(255,255,255,0.15);color:var(--paper);font-weight:600}
 .im-panel form>label{display:block;margin:14px 0;font-size:11px;font-weight:600;color:#506258}
