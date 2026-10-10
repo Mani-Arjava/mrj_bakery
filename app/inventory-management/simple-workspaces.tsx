@@ -201,11 +201,12 @@ export function CustomersWorkspace() {
 
 export function BillingWorkspace() {
   const { data, run, refresh, notice, error } = useSimpleInventory();
-  const [stage, setStage] = useState<'select-customer' | 'add-items' | 'confirm'>('select-customer');
+  const [stage, setStage] = useState<'select-customer' | 'add-items' | 'confirm' | 'preview'>('select-customer');
   const [customerId, setCustomerId] = useState('');
   const [date, setDate] = useState(today());
   const [lines, setLines] = useState<Array<{ productId: string; quantity: number; pricePerPacketPaise: number }>>([{ productId: '', quantity: 0, pricePerPacketPaise: 0 }]);
   const [paid, setPaid] = useState(0);
+  const [lastInvoice, setLastInvoice] = useState<any>(null);
 
   const selected = customerId ? data.customers.find(c => c.id === customerId) : null;
   const totalPaise = lines.reduce((sum, line) => sum + (line.quantity * line.pricePerPacketPaise), 0);
@@ -224,23 +225,30 @@ export function BillingWorkspace() {
     if (validLines.length === 0) return;
 
     run(() => {
-      const product = data.products.find(p => p.id === customerId);
       const saleLines = validLines.map(line => {
         const product = data.products.find(p => p.id === line.productId);
         if (!product) throw new Error('Product not found');
         return { productId: line.productId, productName: product.name, quantityPackets: line.quantity, pricePerPacketPaise: line.pricePerPacketPaise, totalPaise: line.quantity * line.pricePerPacketPaise };
       });
-      storage.postSale({ date, customerId, customerName: selected.name, lines: saleLines, totalPaise, paidPaise: paid, outstandingPaise });
+      const invoice = storage.postSale({ date, customerId, customerName: selected.name, lines: saleLines, totalPaise, paidPaise: paid, outstandingPaise });
 
       // Update customer balance
       const balance = storage.getCustomerBalance(customerId);
       storage.updateCustomer(customerId, { outstandingPaise: balance.outstandingPaise + outstandingPaise, advancePaise: balance.advancePaise });
+
+      // Store invoice for preview
+      setLastInvoice({ ...invoice, customerName: selected.name });
     });
 
+    setStage('preview');
+  }
+
+  function newBill() {
     setCustomerId('');
     setStage('select-customer');
     setLines([{ productId: '', quantity: 0, pricePerPacketPaise: 0 }]);
     setPaid(0);
+    setLastInvoice(null);
   }
 
   if (stage === 'select-customer') {
@@ -253,6 +261,36 @@ export function BillingWorkspace() {
 
   if (stage === 'confirm' && selected) {
     return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Confirm & pay</h2></div><section className="im-panel"><form onSubmit={handleConfirmSale}><div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>{lines.filter(l => l.productId).map((line, idx) => { const product = data.products.find(p => p.id === line.productId); return <tr key={idx}><td>{product?.name}</td><td>{line.quantity}</td><td>{money(line.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{money(line.quantity * line.pricePerPacketPaise)}</td></tr>; })}</tbody></table></div><div style={{ padding: '16px', background: '#f5f5f5', borderRadius: '4px', marginTop: '16px' }}><div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}><span>Total bill:</span><strong style={{ fontSize: '18px' }}>{money(totalPaise)}</strong></div><label>Customer pays now (₹)<input type="number" min="0" step="0.01" value={paid / 100} onChange={(e) => setPaid(Math.round(Number(e.target.value) * 100))} /></label><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', padding: '8px 0', borderTop: '1px solid #ddd' }}><span>Outstanding:</span><strong style={{ fontSize: '16px', color: outstandingPaise > 0 ? '#a43932' : '#2e7d32' }}>{money(Math.abs(outstandingPaise))}</strong></div></div><div style={{ display: 'flex', gap: '8px' }}><button type="button" className="im-secondary" onClick={() => setStage('add-items')}>← Back</button><button type="submit" className="im-primary">Generate bill</button></div></form></section></>;
+  }
+
+  if (stage === 'preview' && lastInvoice) {
+    const billContent = `        ═══════════════════════════════════
+              MRJ BEST BAKERY
+            12A Main Bazaar St.
+           New Aayakudi, Palani
+          Phone: +91-8248395591
+        ═══════════════════════════════════
+
+Bill #: ${lastInvoice.id.slice(0, 8).toUpperCase()}     ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+Date: ${lastInvoice.date}
+Customer: ${lastInvoice.customerName}
+
+Description            Qty    Price      Total
+─────────────────────────────────────────────
+${lastInvoice.lines.map((l: any) => `${l.productName.padEnd(21)} ${String(l.quantityPackets).padStart(3)}    ₹${(l.pricePerPacketPaise / 100).toFixed(2).padStart(6)}  ₹${(l.totalPaise / 100).toFixed(2).padStart(7)}`).join('\n')}
+─────────────────────────────────────────────
+Total Items:           ${lastInvoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0)}
+                                      ────────
+Subtotal:                            ₹${(lastInvoice.totalPaise / 100).toFixed(2)}
+─────────────────────────────────────────────
+Amount Paid:                          ₹${(lastInvoice.paidPaise / 100).toFixed(2)}
+Outstanding:                          ₹${(lastInvoice.outstandingPaise / 100).toFixed(2)}
+═════════════════════════════════════════════
+
+        Thank you for your purchase!
+═════════════════════════════════════════════`;
+
+    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Bill generated</h2></div><section className="im-panel" style={{ textAlign: 'center' }}><div className="bill-preview">{billContent}</div><div style={{ marginTop: '24px', display: 'flex', gap: '8px', justifyContent: 'center' }}><button className="im-secondary" onClick={() => window.print()}>🖨 Print receipt</button><button className="im-primary" onClick={newBill}>New bill</button></div></section></>;
   }
 
   return null;
