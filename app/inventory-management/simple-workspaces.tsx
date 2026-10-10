@@ -281,17 +281,17 @@ ${dash}
     });
 
     const totalItems = invoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0);
-    const subtotal = (invoice.totalPaise / 100).toFixed(2).padStart(9);
-    const paid = (invoice.paidPaise / 100).toFixed(2).padStart(9);
-    const outstanding = (invoice.outstandingPaise / 100).toFixed(2).padStart(9);
+    const subtotal = `₹${(invoice.totalPaise / 100).toFixed(2)}`.padStart(14);
+    const paid = `₹${(invoice.paidPaise / 100).toFixed(2)}`.padStart(14);
+    const outstanding = `₹${(invoice.outstandingPaise / 100).toFixed(2)}`.padStart(14);
 
     content += `${dash}
 Total Items: ${totalItems}
 ${dash}
-Subtotal:                    ₹${subtotal}
+Subtotal:${subtotal}
 ${dash}
-Amount Paid:                 ₹${paid}
-Outstanding:                 ₹${outstanding}
+Amount Paid:${paid}
+Outstanding:${outstanding}
 ${sep}
 
        Thank you for your purchase!
