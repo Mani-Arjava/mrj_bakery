@@ -254,31 +254,31 @@ export function BillingWorkspace() {
   }
 
   function generateBillContent(invoice: any) {
-    return `      ═══════════════════════════════════
-            MRJ BEST BAKERY
-          12A Main Bazaar St.
-         New Aayakudi, Palani
-        Phone: +91-8248395591
-      ═══════════════════════════════════
+    return `   ═════════════════════════════════════
+         MRJ BEST BAKERY
+       12A Main Bazaar St.
+      New Aayakudi, Palani
+     Phone: +91-8248395591
+   ═════════════════════════════════════
 
-Bill #: ${invoice.id.slice(0, 8).toUpperCase().padEnd(10)}    ${new Date(invoice.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+Bill #: ${invoice.id.slice(0, 8).toUpperCase().padEnd(8)}   ${new Date(invoice.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
 Date: ${invoice.date}
 Customer: ${invoice.customerName}
 
-Description          Qty    Price    Total
-────────────────────────────────────────────
-${invoice.lines.map((l: any) => `${l.productName.substring(0, 18).padEnd(18)} ${String(l.quantityPackets).padStart(4)}  ₹${(l.pricePerPacketPaise / 100).toFixed(2).padStart(7)}  ₹${(l.totalPaise / 100).toFixed(2).padStart(7)}`).join('\n')}
-────────────────────────────────────────────
-Total Items:         ${String(invoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0)).padStart(4)}
-                                  ──────────
-Subtotal:                  ₹${(invoice.totalPaise / 100).toFixed(2).padStart(10)}
-────────────────────────────────────────────
-Amount Paid:               ₹${(invoice.paidPaise / 100).toFixed(2).padStart(10)}
-Outstanding:               ₹${(invoice.outstandingPaise / 100).toFixed(2).padStart(10)}
-════════════════════════════════════════════
+Description           Qty    Price      Total
+───────────────────────────────────────────────
+${invoice.lines.map((l: any) => `${l.productName.substring(0, 19).padEnd(19)} ${String(l.quantityPackets).padStart(3)}  ₹${(l.pricePerPacketPaise / 100).toFixed(2).padStart(7)}  ₹${(l.totalPaise / 100).toFixed(2).padStart(7)}`).join('\n')}
+───────────────────────────────────────────────
+Total Items: ${String(invoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0)).padStart(3)}
+                                  ─────────────
+Subtotal:                      ₹${(invoice.totalPaise / 100).toFixed(2).padStart(10)}
+───────────────────────────────────────────────
+Amount Paid:                   ₹${(invoice.paidPaise / 100).toFixed(2).padStart(10)}
+Outstanding:                   ₹${(invoice.outstandingPaise / 100).toFixed(2).padStart(10)}
+═════════════════════════════════════════════
 
-      Thank you for your purchase!
-════════════════════════════════════════════`;
+     Thank you for your purchase!
+═════════════════════════════════════════════`;
   }
 
   if (stage === 'select-customer') {
