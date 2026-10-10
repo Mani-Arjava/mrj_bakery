@@ -254,8 +254,8 @@ export function BillingWorkspace() {
   }
 
   function generateBillContent(invoice: any) {
-    const sep = '═════════════════════════════════════';
-    const dash = '─────────────────────────────────────';
+    const sep = '════════════════════════════════════';
+    const dash = '────────────────────────────────────';
 
     let content = `${sep}
      MRJ BEST BAKERY
@@ -268,28 +268,33 @@ Bill #: ${invoice.id.slice(0, 8).toUpperCase()}  ${new Date(invoice.date).toLoca
 Date: ${invoice.date}
 Customer: ${invoice.customerName}
 
-ITEM              QTY    PRICE      TOTAL
+Item          Qty  Price      Total
 ${dash}
 `;
 
     invoice.lines.forEach((l: any) => {
-      const name = l.productName.substring(0, 16).padEnd(16);
+      const name = l.productName.substring(0, 13).padEnd(13);
       const qty = String(l.quantityPackets).padStart(3);
-      const price = `₹${(l.pricePerPacketPaise / 100).toFixed(2)}`.padStart(10);
-      const total = `₹${(l.totalPaise / 100).toFixed(2)}`.padStart(10);
-      content += `${name} ${qty} ${price} ${total}\n`;
+      const price = `₹${(l.pricePerPacketPaise / 100).toFixed(2)}`.padStart(9);
+      const total = `₹${(l.totalPaise / 100).toFixed(2)}`.padStart(9);
+      content += `${name} ${qty}  ${price} ${total}\n`;
     });
 
+    const totalItems = invoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0);
+    const subtotal = (invoice.totalPaise / 100).toFixed(2).padStart(9);
+    const paid = (invoice.paidPaise / 100).toFixed(2).padStart(9);
+    const outstanding = (invoice.outstandingPaise / 100).toFixed(2).padStart(9);
+
     content += `${dash}
-Total Items: ${String(invoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0))}
-${'─────────────────────────────────────'}
-Subtotal:                    ₹${(invoice.totalPaise / 100).toFixed(2).padStart(9)}
+Total Items: ${totalItems}
 ${dash}
-Amount Paid:                 ₹${(invoice.paidPaise / 100).toFixed(2).padStart(9)}
-Outstanding:                 ₹${(invoice.outstandingPaise / 100).toFixed(2).padStart(9)}
+Subtotal:                  ₹${subtotal}
+${dash}
+Amount Paid:               ₹${paid}
+Outstanding:               ₹${outstanding}
 ${sep}
 
-      Thank you for your purchase!
+       Thank you for your purchase!
 ${sep}`;
 
     return content;
