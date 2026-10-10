@@ -207,6 +207,7 @@ export function BillingWorkspace() {
   const [lines, setLines] = useState<Array<{ productId: string; quantity: number; pricePerPacketPaise: number }>>([{ productId: '', quantity: 0, pricePerPacketPaise: 0 }]);
   const [paid, setPaid] = useState(0);
   const [lastInvoice, setLastInvoice] = useState<any>(null);
+  const [viewingInvoice, setViewingInvoice] = useState<any>(null);
 
   const selected = customerId ? data.customers.find(c => c.id === customerId) : null;
   const totalPaise = lines.reduce((sum, line) => sum + (line.quantity * line.pricePerPacketPaise), 0);
@@ -249,6 +250,35 @@ export function BillingWorkspace() {
     setLines([{ productId: '', quantity: 0, pricePerPacketPaise: 0 }]);
     setPaid(0);
     setLastInvoice(null);
+    setViewingInvoice(null);
+  }
+
+  function generateBillContent(invoice: any) {
+    return `      ═══════════════════════════════════
+            MRJ BEST BAKERY
+          12A Main Bazaar St.
+         New Aayakudi, Palani
+        Phone: +91-8248395591
+      ═══════════════════════════════════
+
+Bill #: ${invoice.id.slice(0, 8).toUpperCase().padEnd(10)}    ${new Date(invoice.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+Date: ${invoice.date}
+Customer: ${invoice.customerName}
+
+Description          Qty    Price    Total
+────────────────────────────────────────────
+${invoice.lines.map((l: any) => `${l.productName.substring(0, 18).padEnd(18)} ${String(l.quantityPackets).padStart(4)}  ₹${(l.pricePerPacketPaise / 100).toFixed(2).padStart(7)}  ₹${(l.totalPaise / 100).toFixed(2).padStart(7)}`).join('\n')}
+────────────────────────────────────────────
+Total Items:         ${String(invoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0)).padStart(4)}
+                                  ──────────
+Subtotal:                  ₹${(invoice.totalPaise / 100).toFixed(2).padStart(10)}
+────────────────────────────────────────────
+Amount Paid:               ₹${(invoice.paidPaise / 100).toFixed(2).padStart(10)}
+Outstanding:               ₹${(invoice.outstandingPaise / 100).toFixed(2).padStart(10)}
+════════════════════════════════════════════
+
+      Thank you for your purchase!
+════════════════════════════════════════════`;
   }
 
   if (stage === 'select-customer') {
@@ -256,7 +286,12 @@ export function BillingWorkspace() {
   }
 
   if (stage === 'add-items' && selected) {
-    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">{selected.name}</h2></div><section className="im-panel"><form onSubmit={(e) => { e.preventDefault(); setStage('confirm'); }}><div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}><label style={{ flex: 1 }}>Date<input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label><button type="button" className="im-secondary" onClick={() => { setCustomerId(''); setStage('select-customer'); }}>Change customer</button></div><div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Qty</th><th>Price/Packet</th><th>Total</th><th /></tr></thead><tbody>{lines.map((line, idx) => { const product = data.products.find(p => p.id === line.productId); const stock = product ? storage.getProductStock(product.id) : 0; return <tr key={idx}><td><select value={line.productId} onChange={(e) => { const p = data.products.find(x => x.id === e.target.value); setLines(lines.map((l, i) => i === idx ? { ...l, productId: e.target.value, pricePerPacketPaise: p?.pricePerPacketPaise || 0 } : l)); }}><option value="">Select…</option>{data.products.map((p) => <option key={p.id} value={p.id}>{p.name} ({stock > 0 ? `${stock} in stock` : 'out'})</option>)}</select></td><td><input type="number" min="0" step="1" value={line.quantity} onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: Number(e.target.value) } : l))} /></td><td>{money(line.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{money(line.quantity * line.pricePerPacketPaise)}</td><td>{lines.length > 1 && <button type="button" onClick={() => setLines(lines.filter((_, i) => i !== idx))}>×</button>}</td></tr>; })}</tbody></table></div><button type="button" className="im-secondary" onClick={() => setLines([...lines, { productId: '', quantity: 0, pricePerPacketPaise: 0 }])}>+ Add line</button><button type="submit" className="im-primary">Continue to payment</button></form></section></>;
+    const customerSalesHistory = storage.getSalesHistory(customerId);
+    if (viewingInvoice) {
+      const billContent = generateBillContent(viewingInvoice);
+      return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">View bill</h2></div><section className="im-panel" style={{ textAlign: 'center' }}><div className="bill-preview">{billContent}</div><div style={{ marginTop: '24px', display: 'flex', gap: '8px', justifyContent: 'center' }}><button className="im-secondary" onClick={() => window.print()}>🖨 Print receipt</button><button className="im-primary" onClick={() => setViewingInvoice(null)}>← Back to customer</button></div></section></>;
+    }
+    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">{selected.name}</h2></div><section className="im-panel"><h3>New bill</h3><form onSubmit={(e) => { e.preventDefault(); setStage('confirm'); }}><div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}><label style={{ flex: 1 }}>Date<input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label><button type="button" className="im-secondary" onClick={() => { setCustomerId(''); setStage('select-customer'); }}>Change customer</button></div><div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Qty</th><th>Price/Packet</th><th>Total</th><th /></tr></thead><tbody>{lines.map((line, idx) => { const product = data.products.find(p => p.id === line.productId); const stock = product ? storage.getProductStock(product.id) : 0; return <tr key={idx}><td><select value={line.productId} onChange={(e) => { const p = data.products.find(x => x.id === e.target.value); setLines(lines.map((l, i) => i === idx ? { ...l, productId: e.target.value, pricePerPacketPaise: p?.pricePerPacketPaise || 0 } : l)); }}><option value="">Select…</option>{data.products.map((p) => <option key={p.id} value={p.id}>{p.name} ({stock > 0 ? `${stock} in stock` : 'out'})</option>)}</select></td><td><input type="number" min="0" step="1" value={line.quantity} onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: Number(e.target.value) } : l))} /></td><td>{money(line.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{money(line.quantity * line.pricePerPacketPaise)}</td><td>{lines.length > 1 && <button type="button" onClick={() => setLines(lines.filter((_, i) => i !== idx))}>×</button>}</td></tr>; })}</tbody></table></div><button type="button" className="im-secondary" onClick={() => setLines([...lines, { productId: '', quantity: 0, pricePerPacketPaise: 0 }])}>+ Add line</button><button type="submit" className="im-primary">Continue to payment</button></form></section><section className="im-panel" style={{ marginTop: '20px' }}><div className="im-panel-title"><h2>Bill history</h2><span>{customerSalesHistory.length} bills</span></div>{customerSalesHistory.length === 0 ? <div className="im-empty"><b>No bills yet</b><p>Bills for this customer will appear here.</p></div> : <div style={{ display: 'grid', gap: '12px' }}>{customerSalesHistory.map((sale) => <div key={sale.id} style={{ border: '1px solid var(--line)', borderRadius: '8px', padding: '14px', background: '#fbfcf8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div><div style={{ fontWeight: 600, marginBottom: '4px' }}>{sale.date}</div><small style={{ color: 'var(--muted)' }}>{sale.lines.length} item{sale.lines.length === 1 ? '' : 's'} • {money(sale.totalPaise)}</small></div><div style={{ display: 'flex', gap: '8px' }}><button type="button" style={{ background: 'transparent', border: '1px solid var(--line)', borderRadius: '4px', padding: '6px 12px', fontSize: '12px', cursor: 'pointer', color: 'var(--coffee)' }} onClick={() => setViewingInvoice(sale)}>View</button><button type="button" style={{ background: 'transparent', border: '1px solid var(--line)', borderRadius: '4px', padding: '6px 12px', fontSize: '12px', cursor: 'pointer', color: 'var(--muted)' }} onClick={() => { setViewingInvoice(sale); setTimeout(() => window.print(), 100); }}>Print</button></div></div>)}</div>}</section></>;
   }
 
   if (stage === 'confirm' && selected) {
@@ -264,32 +299,7 @@ export function BillingWorkspace() {
   }
 
   if (stage === 'preview' && lastInvoice) {
-    const billContent = `      ═══════════════════════════════════
-            MRJ BEST BAKERY
-          12A Main Bazaar St.
-         New Aayakudi, Palani
-        Phone: +91-8248395591
-      ═══════════════════════════════════
-
-Bill #: ${lastInvoice.id.slice(0, 8).toUpperCase().padEnd(10)}    ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
-Date: ${lastInvoice.date}
-Customer: ${lastInvoice.customerName}
-
-Description          Qty    Price    Total
-────────────────────────────────────────────
-${lastInvoice.lines.map((l: any) => `${l.productName.substring(0, 18).padEnd(18)} ${String(l.quantityPackets).padStart(4)}  ₹${(l.pricePerPacketPaise / 100).toFixed(2).padStart(7)}  ₹${(l.totalPaise / 100).toFixed(2).padStart(7)}`).join('\n')}
-────────────────────────────────────────────
-Total Items:         ${String(lastInvoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0)).padStart(4)}
-                                  ──────────
-Subtotal:                  ₹${(lastInvoice.totalPaise / 100).toFixed(2).padStart(10)}
-────────────────────────────────────────────
-Amount Paid:               ₹${(lastInvoice.paidPaise / 100).toFixed(2).padStart(10)}
-Outstanding:               ₹${(lastInvoice.outstandingPaise / 100).toFixed(2).padStart(10)}
-════════════════════════════════════════════
-
-      Thank you for your purchase!
-════════════════════════════════════════════`;
-
+    const billContent = generateBillContent(lastInvoice);
     return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Bill generated</h2></div><section className="im-panel" style={{ textAlign: 'center' }}><div className="bill-preview">{billContent}</div><div style={{ marginTop: '24px', display: 'flex', gap: '8px', justifyContent: 'center' }}><button className="im-secondary" onClick={() => window.print()}>🖨 Print receipt</button><button className="im-primary" onClick={newBill}>New bill</button></div></section></>;
   }
 
