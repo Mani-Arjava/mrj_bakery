@@ -264,31 +264,31 @@ export function BillingWorkspace() {
   }
 
   if (stage === 'preview' && lastInvoice) {
-    const billContent = `        ═══════════════════════════════════
-              MRJ BEST BAKERY
-            12A Main Bazaar St.
-           New Aayakudi, Palani
-          Phone: +91-8248395591
-        ═══════════════════════════════════
+    const billContent = `      ═══════════════════════════════════
+            MRJ BEST BAKERY
+          12A Main Bazaar St.
+         New Aayakudi, Palani
+        Phone: +91-8248395591
+      ═══════════════════════════════════
 
-Bill #: ${lastInvoice.id.slice(0, 8).toUpperCase()}     ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+Bill #: ${lastInvoice.id.slice(0, 8).toUpperCase().padEnd(10)}    ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
 Date: ${lastInvoice.date}
 Customer: ${lastInvoice.customerName}
 
-Description            Qty    Price      Total
-─────────────────────────────────────────────
-${lastInvoice.lines.map((l: any) => `${l.productName.padEnd(21)} ${String(l.quantityPackets).padStart(3)}    ₹${(l.pricePerPacketPaise / 100).toFixed(2).padStart(6)}  ₹${(l.totalPaise / 100).toFixed(2).padStart(7)}`).join('\n')}
-─────────────────────────────────────────────
-Total Items:           ${lastInvoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0)}
-                                      ────────
-Subtotal:                            ₹${(lastInvoice.totalPaise / 100).toFixed(2)}
-─────────────────────────────────────────────
-Amount Paid:                          ₹${(lastInvoice.paidPaise / 100).toFixed(2)}
-Outstanding:                          ₹${(lastInvoice.outstandingPaise / 100).toFixed(2)}
-═════════════════════════════════════════════
+Description          Qty    Price    Total
+────────────────────────────────────────────
+${lastInvoice.lines.map((l: any) => `${l.productName.substring(0, 18).padEnd(18)} ${String(l.quantityPackets).padStart(4)}  ₹${(l.pricePerPacketPaise / 100).toFixed(2).padStart(7)}  ₹${(l.totalPaise / 100).toFixed(2).padStart(7)}`).join('\n')}
+────────────────────────────────────────────
+Total Items:         ${String(lastInvoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0)).padStart(4)}
+                                  ──────────
+Subtotal:                  ₹${(lastInvoice.totalPaise / 100).toFixed(2).padStart(10)}
+────────────────────────────────────────────
+Amount Paid:               ₹${(lastInvoice.paidPaise / 100).toFixed(2).padStart(10)}
+Outstanding:               ₹${(lastInvoice.outstandingPaise / 100).toFixed(2).padStart(10)}
+════════════════════════════════════════════
 
-        Thank you for your purchase!
-═════════════════════════════════════════════`;
+      Thank you for your purchase!
+════════════════════════════════════════════`;
 
     return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Bill generated</h2></div><section className="im-panel" style={{ textAlign: 'center' }}><div className="bill-preview">{billContent}</div><div style={{ marginTop: '24px', display: 'flex', gap: '8px', justifyContent: 'center' }}><button className="im-secondary" onClick={() => window.print()}>🖨 Print receipt</button><button className="im-primary" onClick={newBill}>New bill</button></div></section></>;
   }

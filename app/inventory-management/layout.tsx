@@ -44,17 +44,16 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
   }
 
   const navigation = [
-    { href: '/inventory-management/items', label: 'Items', group: 'SETUP' },
-    { href: '/inventory-management/suppliers', label: 'Suppliers', group: 'SETUP' },
-    { href: '/inventory-management/purchases', label: 'Purchases', group: 'OPERATIONS' },
-    { href: '/inventory-management/products', label: 'Products', group: 'OPERATIONS' },
-    { href: '/inventory-management/production', label: 'Production', group: 'OPERATIONS' },
-    { href: '/inventory-management/customers', label: 'Customers', group: 'OPERATIONS' },
-    { href: '/inventory-management/billing', label: 'Billing', group: 'OPERATIONS' }
+    { href: '/inventory-management/items', label: 'Items' },
+    { href: '/inventory-management/suppliers', label: 'Suppliers' },
+    { href: '/inventory-management/purchases', label: 'Purchases' },
+    { href: '/inventory-management/products', label: 'Products' },
+    { href: '/inventory-management/production', label: 'Production' },
+    { href: '/inventory-management/customers', label: 'Customers' },
+    { href: '/inventory-management/billing', label: 'Billing' }
   ];
 
-  const groups = ['SETUP', 'OPERATIONS'];
   const currentView = navigation.find(n => pathname === n.href)?.label || 'Dashboard';
 
-  return <div className="im-app"><aside className="im-sidebar"><button className="im-brand" onClick={() => router.push('/inventory-management/purchases')}><span>MRJ</span><small>BAKERY</small></button>{groups.map((group) => <div key={group}><span className="im-side-label">{group}</span>{navigation.filter(n => n.group === group).map((item) => <button key={item.href} className={pathname === item.href ? 'active' : ''} onClick={() => router.push(item.href)}>{item.label}</button>)}</div>)}<div className="im-sidebar-bottom"><span>Bakery management</span><button className="im-logout-btn" onClick={() => { localStorage.removeItem('bakery_auth'); window.location.reload(); }}>Sign out</button></div></aside><section className="im-workspace"><header className="im-topbar"><div><p className="im-kicker">MRJ BAKERY</p><h1>{currentView}</h1></div><span className="im-date" suppressHydrationWarning>{new Intl.DateTimeFormat('en-IN', { dateStyle: 'full' }).format(new Date())}</span></header>{children}</section></div>;
+  return <div className="im-app"><aside className="im-sidebar"><button className="im-brand" onClick={() => router.push('/inventory-management/purchases')}><span>MRJ</span><small>BAKERY</small></button>{navigation.map((item) => <button key={item.href} className={pathname === item.href ? 'active' : ''} onClick={() => router.push(item.href)}>{item.label}</button>)}<div className="im-sidebar-bottom"><span>Bakery management</span><button className="im-logout-btn" onClick={() => { localStorage.removeItem('bakery_auth'); window.location.reload(); }}>Sign out</button></div></aside><section className="im-workspace"><header className="im-topbar"><div><p className="im-kicker">MRJ BAKERY</p><h1>{currentView}</h1></div><span className="im-date" suppressHydrationWarning>{new Intl.DateTimeFormat('en-IN', { dateStyle: 'full' }).format(new Date())}</span></header>{children}</section></div>;
 }
