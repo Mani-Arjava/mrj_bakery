@@ -331,18 +331,44 @@ ${sep}`;
     return content;
   }
 
-  async function shareBill(content: string, customerName: string) {
-    const title = `Bill for ${customerName} — MRJ Best Bakery`;
-    if (typeof navigator !== 'undefined' && navigator.share) {
-      try { await navigator.share({ title, text: content }); return; } catch { /* user cancelled */ }
-    }
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      await navigator.clipboard.writeText(content);
-      alert('Bill copied to clipboard!');
-    }
+  async function generateBillBlob(content: string): Promise<Blob> {
+    const lines = content.split('\n');
+    const canvas = document.createElement('canvas');
+    const fontSize = 13;
+    const ctx = canvas.getContext('2d')!;
+    ctx.font = `600 ${fontSize}px "Courier New", Courier, monospace`;
+    const cw = ctx.measureText('W').width;
+    const lh = Math.ceil(fontSize * 1.65);
+    const pad = 18;
+    const maxLen = Math.max(...lines.map(l => l.length));
+    canvas.width  = Math.ceil(maxLen * cw) + pad * 2;
+    canvas.height = lines.length * lh + pad * 2;
+    ctx.font = `600 ${fontSize}px "Courier New", Courier, monospace`;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#111111';
+    lines.forEach((line, i) => ctx.fillText(line, pad, pad + fontSize + i * lh));
+    return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Canvas toBlob failed')), 'image/png', 1.0));
   }
 
-  function openWhatsApp(content: string) {
+  async function shareAsImage(content: string, customerName: string) {
+    const blob = await generateBillBlob(content);
+    const file = new File([blob], `bill-${customerName}.png`, { type: 'image/png' });
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ title: `Bill — ${customerName}`, files: [file] }); return; } catch { /* cancelled */ }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `bill-${customerName}.png`; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function sendWhatsApp(content: string, customerName: string) {
+    const blob = await generateBillBlob(content);
+    const file = new File([blob], `bill-${customerName}.png`, { type: 'image/png' });
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ title: `Bill — ${customerName}`, files: [file] }); return; } catch { /* cancelled */ }
+    }
     window.open(`https://wa.me/?text=${encodeURIComponent(content)}`, '_blank', 'noopener');
   }
 
@@ -360,8 +386,8 @@ ${sep}`;
     const content = generateBillContent(invoice);
     return (
       <div className="bill-action-row">
-        <button className="im-secondary" onClick={() => shareBill(content, invoice.customerName)}>Share</button>
-        <button className="im-secondary" onClick={() => openWhatsApp(content)}>WhatsApp</button>
+        <button className="im-secondary" onClick={() => shareAsImage(content, invoice.customerName)}>Share Image</button>
+        <button className="im-secondary" onClick={() => sendWhatsApp(content, invoice.customerName)}>WhatsApp</button>
         <button className="im-secondary" onClick={() => savePdf(content, invoice.id.slice(0, 8).toUpperCase())}>Save PDF</button>
         <button className="im-secondary" onClick={() => window.print()}>Print</button>
       </div>
