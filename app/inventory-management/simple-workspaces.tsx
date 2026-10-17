@@ -11,7 +11,7 @@ const money = (paise: number) => new Intl.NumberFormat('en-IN', { style: 'curren
 type Mode = 'cards' | 'table';
 
 export function useSimpleInventory() {
-  const [data, setData] = useState<storage.InventoryData>({ suppliers: [], items: [], purchases: [], products: [], productionBatches: [], customers: [], saleInvoices: [], stockMovements: [] });
+  const [data, setData] = useState<storage.InventoryData>({ suppliers: [], items: [], purchases: [], products: [], productionItems: [], recipes: [], productionBatches: [], customers: [], saleInvoices: [], stockMovements: [] });
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const refresh = () => setData(storage.getData());
@@ -127,28 +127,310 @@ export function PurchasesWorkspace() {
   return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">PURCHASES</p><h2 className="im-page-title">Record a purchase</h2></div><div className="action-group"><ViewToggle mode={mode} setMode={setMode} /><button className="im-primary" onClick={newPurchase}>+ New purchase</button></div></div>{showEditor && <PurchaseEditor data={data} run={run} refresh={refresh} editingPurchase={editing} done={() => { setEditing(null); setShowEditor(false); }} />}<section className="im-panel purchase-history-panel"><div className="im-panel-title"><h2>Purchase history</h2><span>{data.purchases.length} total</span></div>{data.purchases.length === 0 ? <Empty title="No purchases yet" text="Your saved purchases will appear here." /> : mode === 'table' ? <div className="im-table-scroll"><table><thead><tr><th>Date</th><th>Supplier</th><th>Items</th><th>Purchase</th><th>Paid</th><th>Status</th><th>Actions</th></tr></thead><tbody>{data.purchases.map((purchase) => <tr key={purchase.id}><td>{purchase.date}</td><td><b>{purchase.supplierName}</b></td><td>{purchase.lines.length}</td><td>{money(purchase.totalPaise)}</td><td>{money(purchase.paidPaise)}</td><td><PurchaseStatus purchase={purchase} /></td><td><PurchaseActions edit={() => edit(purchase)} remove={() => remove(purchase)} /></td></tr>)}</tbody></table></div> : <div className="purchase-history">{data.purchases.map((purchase) => <article className="purchase-history-card" key={purchase.id}><div><div><b>{purchase.supplierName}</b><small>{purchase.date} · {purchase.lines.length} item{purchase.lines.length === 1 ? '' : 's'}</small></div><strong>{money(purchase.totalPaise)}</strong></div><ul>{purchase.lines.map((line) => <li key={line.itemId + line.totalPaise}><span>{line.itemName} <small>{line.quantity} {line.unit} × {money(line.unitPricePaise)}</small></span><b>{money(line.totalPaise)}</b></li>)}</ul><footer><span>Paid {money(purchase.paidPaise)}</span><PurchaseStatus purchase={purchase} /></footer><PurchaseActions edit={() => edit(purchase)} remove={() => remove(purchase)} /></article>)}</div>}</section></>;
 }
 
+export function RecipesWorkspace() {
+  const { data, run, notice, error } = useSimpleInventory();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Production item form
+  const [showItemForm, setShowItemForm] = useState(false);
+  const [editingItem, setEditingItem] = useState<storage.ProductionItem | null>(null);
+  const [itemForm, setItemForm] = useState({ name: '', productionUnit: 'KG' as 'KG' | 'Tray', piecesPerUnit: '' });
+
+  // Ingredient row drafts
+  const [ingredientDrafts, setIngredientDrafts] = useState<Array<{ itemId: string; quantityPerUnit: string }>>([]);
+  const [editingIngredients, setEditingIngredients] = useState(false);
+
+  const selectedItem = data.productionItems.find(pi => pi.id === selectedId);
+  const selectedRecipe = selectedItem ? data.recipes.find(r => r.productionItemId === selectedItem.id) : undefined;
+
+  function openCreateItem() {
+    setEditingItem(null);
+    setItemForm({ name: '', productionUnit: 'KG', piecesPerUnit: '' });
+    setShowItemForm(true);
+  }
+
+  function openEditItem(item: storage.ProductionItem) {
+    setEditingItem(item);
+    setItemForm({ name: item.name, productionUnit: item.productionUnit, piecesPerUnit: String(item.piecesPerUnit) });
+    setShowItemForm(true);
+  }
+
+  function submitItem(e: FormEvent) {
+    e.preventDefault();
+    if (!itemForm.name.trim() || !itemForm.piecesPerUnit) return;
+    const payload = { name: itemForm.name.trim(), productionUnit: itemForm.productionUnit, piecesPerUnit: Number(itemForm.piecesPerUnit) };
+    run(() => {
+      if (editingItem) storage.updateProductionItem(editingItem.id, payload);
+      else storage.addProductionItem(payload);
+    });
+    setShowItemForm(false);
+    setEditingItem(null);
+  }
+
+  function removeItem(item: storage.ProductionItem) {
+    if (window.confirm(`Delete ${item.name}? This will also delete its recipe.`)) {
+      run(() => storage.deleteProductionItem(item.id));
+      if (selectedId === item.id) setSelectedId(null);
+    }
+  }
+
+  function startEditIngredients() {
+    const drafts = selectedRecipe
+      ? selectedRecipe.ingredients.map(ing => ({ itemId: ing.itemId, quantityPerUnit: String(ing.quantityPerUnit) }))
+      : [{ itemId: '', quantityPerUnit: '' }];
+    setIngredientDrafts(drafts.length ? drafts : [{ itemId: '', quantityPerUnit: '' }]);
+    setEditingIngredients(true);
+  }
+
+  function saveIngredients() {
+    if (!selectedItem) return;
+    const valid = ingredientDrafts.filter(d => d.itemId && Number(d.quantityPerUnit) > 0);
+    run(() => {
+      if (valid.length === 0) {
+        storage.deleteRecipe(selectedItem.id);
+      } else {
+        const ingredients: storage.RecipeIngredient[] = valid.map(d => {
+          const item = data.items.find(it => it.id === d.itemId)!;
+          return { itemId: item.id, itemName: item.name, quantityPerUnit: Number(d.quantityPerUnit), unit: item.unit };
+        });
+        storage.saveRecipe(selectedItem.id, ingredients);
+      }
+    });
+    setEditingIngredients(false);
+  }
+
+  function updateDraft(index: number, patch: Partial<{ itemId: string; quantityPerUnit: string }>) {
+    setIngredientDrafts(ingredientDrafts.map((d, i) => i === index ? { ...d, ...patch } : d));
+  }
+
+  if (selectedItem) {
+    return <>
+      <Feedback notice={notice} error={error} />
+      <div className="im-section-actions">
+        <button className="im-secondary" onClick={() => { setSelectedId(null); setEditingIngredients(false); }}>← All recipes</button>
+        <div className="action-group">
+          <button className="im-secondary" onClick={() => openEditItem(selectedItem)}>Edit item</button>
+          <button className="action-delete standalone-delete" onClick={() => removeItem(selectedItem)}>Delete item</button>
+        </div>
+      </div>
+
+      <section className="im-panel">
+        <div style={{ marginBottom: '16px' }}>
+          <p className="im-kicker">PRODUCTION ITEM</p>
+          <h2 style={{ margin: '4px 0 2px' }}>{selectedItem.name}</h2>
+          <p style={{ color: 'var(--muted)', margin: 0 }}>
+            Unit: <b>{selectedItem.productionUnit}</b> &nbsp;·&nbsp; 1 {selectedItem.productionUnit} = <b>{selectedItem.piecesPerUnit} pieces</b>
+          </p>
+        </div>
+
+        <div className="im-panel-title" style={{ marginTop: '24px' }}>
+          <h2>Recipe ingredients</h2>
+          {!editingIngredients && (
+            <button className="im-secondary" onClick={startEditIngredients}>
+              {selectedRecipe ? 'Edit recipe' : 'Add recipe'}
+            </button>
+          )}
+        </div>
+
+        {editingIngredients ? (
+          <div>
+            <p className="im-muted" style={{ marginBottom: '12px' }}>
+              Enter quantity of each raw material needed per 1 {selectedItem.productionUnit} of {selectedItem.name}.
+            </p>
+            <div className="im-table-scroll" style={{ marginBottom: '12px' }}>
+              <table>
+                <thead><tr><th>Raw material</th><th>Qty per 1 {selectedItem.productionUnit}</th><th></th></tr></thead>
+                <tbody>
+                  {ingredientDrafts.map((draft, idx) => (
+                    <tr key={idx}>
+                      <td>
+                        <select value={draft.itemId} onChange={e => updateDraft(idx, { itemId: e.target.value })}>
+                          <option value="">Select item…</option>
+                          {data.items.map(it => <option key={it.id} value={it.id}>{it.name} ({it.unit})</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <input type="number" min="0.001" step="0.001" value={draft.quantityPerUnit}
+                          onChange={e => updateDraft(idx, { quantityPerUnit: e.target.value })}
+                          placeholder="0" style={{ width: '100px' }} />
+                        {draft.itemId && <small style={{ marginLeft: '6px', color: 'var(--muted)' }}>{data.items.find(it => it.id === draft.itemId)?.unit}</small>}
+                      </td>
+                      <td>
+                        {ingredientDrafts.length > 1 && (
+                          <button type="button" className="im-remove" onClick={() => setIngredientDrafts(ingredientDrafts.filter((_, i) => i !== idx))}>×</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button className="im-text-button" type="button" onClick={() => setIngredientDrafts([...ingredientDrafts, { itemId: '', quantityPerUnit: '' }])}>+ Add ingredient</button>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                <button className="im-secondary" type="button" onClick={() => setEditingIngredients(false)}>Cancel</button>
+                <button className="im-primary" type="button" onClick={saveIngredients}>Save recipe</button>
+              </div>
+            </div>
+          </div>
+        ) : selectedRecipe && selectedRecipe.ingredients.length > 0 ? (
+          <div className="im-table-scroll">
+            <table>
+              <thead><tr><th>Raw material</th><th>Qty per 1 {selectedItem.productionUnit}</th><th>Unit</th></tr></thead>
+              <tbody>
+                {selectedRecipe.ingredients.map((ing, idx) => (
+                  <tr key={idx}>
+                    <td><b>{ing.itemName}</b></td>
+                    <td>{ing.quantityPerUnit.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
+                    <td>{ing.unit}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <Empty
+            title="No recipe yet"
+            text={`Add the raw materials needed to produce 1 ${selectedItem.productionUnit} of ${selectedItem.name}.`}
+            action="Add recipe"
+            onAction={startEditIngredients}
+          />
+        )}
+      </section>
+
+      {showItemForm && (
+        <div className="im-modal-backdrop">
+          <div className="im-modal">
+            <button className="im-modal-close" onClick={() => setShowItemForm(false)}>×</button>
+            <h2>Edit production item</h2>
+            <form className="im-modal-form" onSubmit={submitItem}>
+              <label>Item name<input autoFocus required value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e.target.value })} /></label>
+              <label>Production unit
+                <select value={itemForm.productionUnit} onChange={e => setItemForm({ ...itemForm, productionUnit: e.target.value as 'KG' | 'Tray' })}>
+                  <option value="KG">KG</option>
+                  <option value="Tray">Tray</option>
+                </select>
+              </label>
+              <label>Pieces per {itemForm.productionUnit}
+                <input required type="number" min="0.01" step="0.01" value={itemForm.piecesPerUnit}
+                  onChange={e => setItemForm({ ...itemForm, piecesPerUnit: e.target.value })}
+                  placeholder="e.g. 25" />
+              </label>
+              <button className="im-primary" type="submit">Save changes</button>
+            </form>
+          </div>
+        </div>
+      )}
+    </>;
+  }
+
+  return <>
+    <Feedback notice={notice} error={error} />
+    <div className="im-section-actions">
+      <div><p className="im-kicker">RECIPES</p><h2 className="im-page-title">Production items & recipes</h2></div>
+      <button className="im-primary" onClick={openCreateItem}>+ Add production item</button>
+    </div>
+
+    {data.productionItems.length === 0 ? (
+      <Empty
+        title="No production items yet"
+        text="Create a production item (e.g. Roll Cake) to define its recipe and track its stock."
+        action="Add production item"
+        onAction={openCreateItem}
+      />
+    ) : (
+      <section className="im-panel">
+        <div className="im-table-scroll">
+          <table>
+            <thead>
+              <tr><th>Production item</th><th>Unit</th><th>Conversion</th><th>Recipe</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              {data.productionItems.map(item => {
+                const recipe = data.recipes.find(r => r.productionItemId === item.id);
+                return (
+                  <tr key={item.id}>
+                    <td><button className="table-link" onClick={() => { setSelectedId(item.id); setEditingIngredients(false); }}><b>{item.name}</b></button></td>
+                    <td>{item.productionUnit}</td>
+                    <td>1 {item.productionUnit} = {item.piecesPerUnit} pcs</td>
+                    <td>
+                      {recipe && recipe.ingredients.length > 0
+                        ? <span className="im-status settled">{recipe.ingredients.length} ingredient{recipe.ingredients.length === 1 ? '' : 's'}</span>
+                        : <span className="im-status due">No recipe</span>}
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        <button className="action-edit" onClick={() => { setSelectedId(item.id); setEditingIngredients(false); }}>View</button>
+                        <button className="action-edit" onClick={() => openEditItem(item)}>Edit</button>
+                        <button className="action-delete" onClick={() => removeItem(item)}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )}
+
+    {showItemForm && (
+      <div className="im-modal-backdrop">
+        <div className="im-modal">
+          <button className="im-modal-close" onClick={() => setShowItemForm(false)}>×</button>
+          <h2>Add production item</h2>
+          <form className="im-modal-form" onSubmit={submitItem}>
+            <label>Item name<input autoFocus required value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e.target.value })} placeholder="e.g. Roll Cake" /></label>
+            <label>Production unit
+              <select value={itemForm.productionUnit} onChange={e => setItemForm({ ...itemForm, productionUnit: e.target.value as 'KG' | 'Tray' })}>
+                <option value="KG">KG</option>
+                <option value="Tray">Tray</option>
+              </select>
+            </label>
+            <label>Pieces per {itemForm.productionUnit}
+              <input required type="number" min="0.01" step="0.01" value={itemForm.piecesPerUnit}
+                onChange={e => setItemForm({ ...itemForm, piecesPerUnit: e.target.value })}
+                placeholder="e.g. 25" />
+              <small style={{ color: 'var(--muted)' }}>How many pieces does 1 {itemForm.productionUnit || 'unit'} produce?</small>
+            </label>
+            <button className="im-primary" type="submit">Create production item</button>
+          </form>
+        </div>
+      </div>
+    )}
+  </>;
+}
+
 export function ProductsWorkspace() {
-  const { data, run, refresh, notice, error } = useSimpleInventory();
+  const { data, run, notice, error } = useSimpleInventory();
   const [editing, setEditing] = useState<storage.Product | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '' });
+  const [form, setForm] = useState({ name: '', count: '', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' });
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!form.name) return;
     const wholesale = form.wholesalePricePerPacketPaise !== '' ? Math.round(Number(form.wholesalePricePerPacketPaise) * 100) : undefined;
+    const count = form.count !== '' ? Number(form.count) : undefined;
+    const productionItemId = form.productionItemId || undefined;
     run(() => {
-      if (editing) storage.updateProduct(editing.id, { name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale });
-      else storage.addProduct({ name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale });
+      if (editing) storage.updateProduct(editing.id, { name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale, count, productionItemId });
+      else storage.addProduct({ name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale, count, productionItemId });
     });
-    setForm({ name: '', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '' });
+    setForm({ name: '', count: '', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' });
     setEditing(null);
     setShowForm(false);
   }
 
   function editProduct(product: storage.Product) {
     setEditing(product);
-    setForm({ name: product.name, pricePerPacketPaise: product.pricePerPacketPaise, wholesalePricePerPacketPaise: product.wholesalePricePerPacketPaise != null ? String(product.wholesalePricePerPacketPaise / 100) : '' });
+    setForm({
+      name: product.name,
+      count: product.count != null ? String(product.count) : '',
+      pricePerPacketPaise: product.pricePerPacketPaise,
+      wholesalePricePerPacketPaise: product.wholesalePricePerPacketPaise != null ? String(product.wholesalePricePerPacketPaise / 100) : '',
+      productionItemId: product.productionItemId ?? '',
+    });
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -157,50 +439,271 @@ export function ProductsWorkspace() {
     if (window.confirm(`Delete ${product.name}? This cannot be undone.`)) run(() => storage.deleteProduct(product.id));
   }
 
-  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">PRODUCTS</p><h2 className="im-page-title">Manage products & pricing</h2></div><button className="im-primary" onClick={() => { setEditing(null); setForm({ name: '', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '' }); setShowForm(true); }}>+ Add product</button></div>{showForm && <section className="im-panel"><h3>{editing ? 'Edit product' : 'New product'}</h3><form onSubmit={handleSubmit}><label>Product name<input required autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label>Retail price per packet (₹)<input required type="number" step="0.01" min="0" value={form.pricePerPacketPaise / 100} onChange={(e) => setForm({ ...form, pricePerPacketPaise: Math.round(Number(e.target.value) * 100) })} /></label><label>Wholesale price per packet (₹) <span style={{ fontWeight: 400, color: 'var(--muted)' }}>optional</span><input type="number" step="0.01" min="0" value={form.wholesalePricePerPacketPaise} onChange={(e) => setForm({ ...form, wholesalePricePerPacketPaise: e.target.value })} placeholder="Leave blank to use retail price" /></label><div style={{ display: 'flex', gap: '8px' }}><button type="button" className="im-secondary" onClick={() => setShowForm(false)}>Cancel</button><button type="submit" className="im-primary">Save</button></div></form></section>}<section className="im-panel"><div className="im-panel-title"><h2>Products</h2><span>{data.products.length} total</span></div>{data.products.length === 0 ? <Empty title="No products yet" text="Add your first finished good to start tracking production and sales." /> : <div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Retail Price</th><th>Wholesale Price</th><th>Current Stock</th><th>Actions</th></tr></thead><tbody>{data.products.map((product) => { const stock = storage.getProductStock(product.id); return <tr key={product.id}><td><b>{product.name}</b></td><td>{money(product.pricePerPacketPaise)}</td><td>{product.wholesalePricePerPacketPaise != null ? money(product.wholesalePricePerPacketPaise) : '—'}</td><td style={{ fontWeight: 600 }}>{stock} packets</td><td><div className="row-actions"><button className="action-edit" onClick={() => editProduct(product)}>Edit</button><button className="action-delete" onClick={() => removeProduct(product)}>Delete</button></div></td></tr>; })}</tbody></table></div>}</section></>;
+  const linkedProdItem = data.productionItems.find(pi => pi.id === form.productionItemId);
+
+  return <>
+    <Feedback notice={notice} error={error} />
+    <div className="im-section-actions">
+      <div><p className="im-kicker">PRODUCTS</p><h2 className="im-page-title">Manage products & pricing</h2></div>
+      <button className="im-primary" onClick={() => { setEditing(null); setForm({ name: '', count: '', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' }); setShowForm(true); }}>+ Add product</button>
+    </div>
+
+    {showForm && (
+      <section className="im-panel">
+        <h3>{editing ? 'Edit product' : 'New product'}</h3>
+        <form onSubmit={handleSubmit}>
+          <label>Product name<input required autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. 20-Piece Roll Cake" /></label>
+          <label>Pieces per packet (count)
+            <input type="number" step="1" min="1" value={form.count} onChange={(e) => setForm({ ...form, count: e.target.value })} placeholder="e.g. 20" />
+            <small style={{ color: 'var(--muted)' }}>Number of pieces in one packet</small>
+          </label>
+          <label>Retail price per packet (₹)<input required type="number" step="0.01" min="0" value={form.pricePerPacketPaise / 100} onChange={(e) => setForm({ ...form, pricePerPacketPaise: Math.round(Number(e.target.value) * 100) })} /></label>
+          <label>Wholesale price per packet (₹) <span style={{ fontWeight: 400, color: 'var(--muted)' }}>optional</span>
+            <input type="number" step="0.01" min="0" value={form.wholesalePricePerPacketPaise} onChange={(e) => setForm({ ...form, wholesalePricePerPacketPaise: e.target.value })} placeholder="Leave blank to use retail price" />
+          </label>
+          <label>Production item (links stock)
+            <select value={form.productionItemId} onChange={(e) => setForm({ ...form, productionItemId: e.target.value })}>
+              <option value="">— Not linked —</option>
+              {data.productionItems.map(pi => <option key={pi.id} value={pi.id}>{pi.name}</option>)}
+            </select>
+            {data.productionItems.length === 0 && <small style={{ color: 'var(--muted)' }}>Create production items on the Recipes page first.</small>}
+          </label>
+          {linkedProdItem && (
+            <p className="im-muted" style={{ marginTop: 0 }}>
+              Unit conversion: 1 {linkedProdItem.productionUnit} = {linkedProdItem.piecesPerUnit} pieces
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button type="button" className="im-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+            <button type="submit" className="im-primary">Save</button>
+          </div>
+        </form>
+      </section>
+    )}
+
+    <section className="im-panel">
+      <div className="im-panel-title"><h2>Products</h2><span>{data.products.length} total</span></div>
+      {data.products.length === 0 ? (
+        <Empty title="No products yet" text="Add your first finished good to start tracking production and sales." />
+      ) : (
+        <div className="im-table-scroll">
+          <table>
+            <thead>
+              <tr><th>Product</th><th>Count</th><th>Retail Price</th><th>Wholesale Price</th><th>Production Item</th><th>Stock</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              {data.products.map((product) => {
+                const prodItem = product.productionItemId ? data.productionItems.find(pi => pi.id === product.productionItemId) : undefined;
+                const stock = prodItem ? storage.getProductionItemStock(prodItem.id) : null;
+                return (
+                  <tr key={product.id}>
+                    <td><b>{product.name}</b></td>
+                    <td>{product.count ?? '—'}</td>
+                    <td>{money(product.pricePerPacketPaise)}</td>
+                    <td>{product.wholesalePricePerPacketPaise != null ? money(product.wholesalePricePerPacketPaise) : '—'}</td>
+                    <td>{prodItem ? prodItem.name : <span style={{ color: 'var(--muted)' }}>—</span>}</td>
+                    <td style={{ fontWeight: 600 }}>{stock != null ? `${stock} pcs` : '—'}</td>
+                    <td><div className="row-actions"><button className="action-edit" onClick={() => editProduct(product)}>Edit</button><button className="action-delete" onClick={() => removeProduct(product)}>Delete</button></div></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  </>;
 }
 
 export function ProductionWorkspace() {
-  const { data, run, refresh, notice, error } = useSimpleInventory();
+  const { data, run, notice, error } = useSimpleInventory();
   const [date, setDate] = useState(today());
-  const [productId, setProductId] = useState('');
-  const [quantity, setQuantity] = useState('');
+  const [productionItemId, setProductionItemId] = useState('');
+  const [productionQty, setProductionQty] = useState('');
+  const [piecesOverride, setPiecesOverride] = useState('');
   const [notes, setNotes] = useState('');
   const [editingBatch, setEditingBatch] = useState<storage.ProductionBatch | null>(null);
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!productId || !quantity) return;
-    run(() => {
-      const product = data.products.find(p => p.id === productId);
-      if (!product) throw new Error('Product not found');
-      if (editingBatch) {
-        storage.updateProductionBatch(editingBatch.id, { date, productId, productName: product.name, quantityPackets: Number(quantity), notes: notes || undefined });
-      } else {
-        storage.addProductionBatch({ date, productId, productName: product.name, quantityPackets: Number(quantity), notes: notes || undefined });
-      }
-    });
-    setQuantity('');
+  const selectedProdItem = data.productionItems.find(pi => pi.id === productionItemId);
+  const selectedRecipe = selectedProdItem ? data.recipes.find(r => r.productionItemId === selectedProdItem.id) : undefined;
+
+  // Auto-calculate pieces from quantity × piecesPerUnit
+  const autoPieces = selectedProdItem && productionQty
+    ? Math.floor(Number(productionQty) * selectedProdItem.piecesPerUnit)
+    : null;
+  const piecesValue = piecesOverride !== '' ? piecesOverride : (autoPieces != null ? String(autoPieces) : '');
+
+  // Raw material preview for recipe
+  const recipeSummary = selectedRecipe && productionQty && Number(productionQty) > 0
+    ? selectedRecipe.ingredients.map(ing => ({
+        name: ing.itemName,
+        needed: ing.quantityPerUnit * Number(productionQty),
+        unit: ing.unit,
+      }))
+    : [];
+
+  function resetForm() {
+    setProductionItemId('');
+    setProductionQty('');
+    setPiecesOverride('');
     setNotes('');
     setEditingBatch(null);
+  }
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!productionItemId || !productionQty) return;
+    const pi = data.productionItems.find(p => p.id === productionItemId);
+    if (!pi) return;
+    const pieces = piecesOverride !== '' ? Number(piecesOverride) : Math.floor(Number(productionQty) * pi.piecesPerUnit);
+    run(() => {
+      const batchData = {
+        date,
+        productionItemId: pi.id,
+        productionItemName: pi.name,
+        productionQuantity: Number(productionQty),
+        productionUnit: pi.productionUnit,
+        piecesProduced: pieces,
+        notes: notes || undefined,
+      };
+      if (editingBatch) {
+        storage.updateProductionBatch(editingBatch.id, batchData);
+      } else {
+        storage.addProductionBatch(batchData);
+      }
+    });
+    resetForm();
   }
 
   function startEdit(batch: storage.ProductionBatch) {
     setEditingBatch(batch);
     setDate(batch.date);
-    setProductId(batch.productId);
-    setQuantity(String(batch.quantityPackets));
+    setProductionItemId(batch.productionItemId);
+    setProductionQty(String(batch.productionQuantity));
+    // Only set override if it differs from auto-calculated
+    const pi = data.productionItems.find(p => p.id === batch.productionItemId);
+    const auto = pi ? Math.floor(batch.productionQuantity * pi.piecesPerUnit) : batch.piecesProduced;
+    setPiecesOverride(batch.piecesProduced !== auto ? String(batch.piecesProduced) : '');
     setNotes(batch.notes || '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function removeBatch(batch: storage.ProductionBatch) {
-    if (window.confirm(`Delete this production entry for ${batch.productName}? Stock will be reversed.`)) run(() => storage.deleteProductionBatch(batch.id));
+    if (window.confirm(`Delete this production entry for ${batch.productionItemName}? Stock and raw materials will be reversed.`))
+      run(() => storage.deleteProductionBatch(batch.id));
   }
 
   const dailyProduction = storage.getDailyProduction(date);
+  const currentStock = selectedProdItem ? storage.getProductionItemStock(selectedProdItem.id) : null;
 
-  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">PRODUCTION</p><h2 className="im-page-title">Record daily production</h2></div></div><section className="im-panel"><form onSubmit={handleSubmit}><div className="im-three"><label>Date<input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label><label>Product<select required value={productId} onChange={(e) => setProductId(e.target.value)}><option value="">Select product…</option>{data.products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label>Quantity (packets)<input required type="number" min="1" step="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></label></div><label>Notes<textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any production notes…" rows={2} /></label><div style={{ display: 'flex', gap: '8px' }}>{editingBatch && <button type="button" className="im-secondary" onClick={() => { setEditingBatch(null); setProductId(''); setQuantity(''); setNotes(''); }}>Cancel</button>}<button type="submit" className="im-primary">{editingBatch ? 'Update production' : 'Record production'}</button></div></form></section><section className="im-panel"><div className="im-panel-title"><h2>Production for {date}</h2><span>{dailyProduction.length} batch{dailyProduction.length === 1 ? '' : 'es'}</span></div>{dailyProduction.length === 0 ? <Empty title="No production recorded" text="Production entries for this date will appear here." /> : <div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Packets</th><th>Notes</th><th>Actions</th></tr></thead><tbody>{dailyProduction.map((batch) => <tr key={batch.id}><td><b>{batch.productName}</b></td><td style={{ fontWeight: 600 }}>{batch.quantityPackets}</td><td>{batch.notes || '—'}</td><td><div className="row-actions"><button className="action-edit" onClick={() => startEdit(batch)}>Edit</button><button className="action-delete" onClick={() => removeBatch(batch)}>Delete</button></div></td></tr>)}</tbody></table></div>}</section></>;
+  return <>
+    <Feedback notice={notice} error={error} />
+    <div className="im-section-actions"><div><p className="im-kicker">PRODUCTION</p><h2 className="im-page-title">Record daily production</h2></div></div>
+
+    <section className="im-panel">
+      {data.productionItems.length === 0 ? (
+        <p className="im-muted">No production items defined yet. Add them on the <b>Recipes</b> page first.</p>
+      ) : (
+        <form onSubmit={handleSubmit}>
+          <div className="im-three">
+            <label>Date
+              <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </label>
+            <label>Production item
+              <select required value={productionItemId} onChange={(e) => { setProductionItemId(e.target.value); setProductionQty(''); setPiecesOverride(''); }}>
+                <option value="">Select item…</option>
+                {data.productionItems.map(pi => {
+                  const stock = storage.getProductionItemStock(pi.id);
+                  return <option key={pi.id} value={pi.id}>{pi.name} ({stock} pcs in stock)</option>;
+                })}
+              </select>
+            </label>
+            <label>Quantity ({selectedProdItem?.productionUnit ?? 'unit'})
+              <input required type="number" min="0.001" step="0.001" value={productionQty}
+                onChange={(e) => { setProductionQty(e.target.value); setPiecesOverride(''); }}
+                placeholder="e.g. 5" />
+            </label>
+          </div>
+
+          {selectedProdItem && productionQty && (
+            <div className="im-two">
+              <label>Pieces produced
+                <input type="number" min="0" step="1" value={piecesValue}
+                  onChange={(e) => setPiecesOverride(e.target.value)}
+                  placeholder={autoPieces != null ? String(autoPieces) : '0'} />
+                {autoPieces != null && piecesOverride === '' && (
+                  <small style={{ color: 'var(--muted)' }}>
+                    Auto: {productionQty} × {selectedProdItem.piecesPerUnit} = {autoPieces} pcs
+                  </small>
+                )}
+              </label>
+              {currentStock != null && (
+                <div style={{ alignSelf: 'flex-end', padding: '8px 0', color: 'var(--muted)', fontSize: '13px' }}>
+                  Current stock: <b>{currentStock} pcs</b>
+                  {autoPieces != null && <> → after: <b>{currentStock + (piecesOverride !== '' ? Number(piecesOverride) : autoPieces)} pcs</b></>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {recipeSummary.length > 0 && (
+            <div style={{ background: '#f5f5f0', borderRadius: '6px', padding: '10px 14px', marginBottom: '12px' }}>
+              <small style={{ fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: '6px' }}>
+                RAW MATERIALS TO BE DEDUCTED
+              </small>
+              {recipeSummary.map((r, i) => (
+                <div key={i} style={{ fontSize: '13px' }}>
+                  {r.name}: <b>{r.needed.toLocaleString('en-IN', { maximumFractionDigits: 3 })} {r.unit}</b>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <label>Notes
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any production notes…" rows={2} />
+          </label>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {editingBatch && <button type="button" className="im-secondary" onClick={resetForm}>Cancel</button>}
+            <button type="submit" className="im-primary">{editingBatch ? 'Update production' : 'Record production'}</button>
+          </div>
+        </form>
+      )}
+    </section>
+
+    <section className="im-panel">
+      <div className="im-panel-title">
+        <h2>Production for {date}</h2>
+        <span>{dailyProduction.length} batch{dailyProduction.length === 1 ? '' : 'es'}</span>
+      </div>
+      {dailyProduction.length === 0 ? (
+        <Empty title="No production recorded" text="Production entries for this date will appear here." />
+      ) : (
+        <div className="im-table-scroll">
+          <table>
+            <thead>
+              <tr><th>Item</th><th>Quantity</th><th>Pieces</th><th>Notes</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              {dailyProduction.map((batch) => (
+                <tr key={batch.id}>
+                  <td><b>{batch.productionItemName}</b></td>
+                  <td style={{ fontWeight: 600 }}>{batch.productionQuantity} {batch.productionUnit}</td>
+                  <td style={{ fontWeight: 600 }}>{batch.piecesProduced} pcs</td>
+                  <td>{batch.notes || '—'}</td>
+                  <td>
+                    <div className="row-actions">
+                      <button className="action-edit" onClick={() => startEdit(batch)}>Edit</button>
+                      <button className="action-delete" onClick={() => removeBatch(batch)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  </>;
 }
 
 export function CustomersWorkspace() {
@@ -416,7 +919,7 @@ ${sep}`;
       const billContent = generateBillContent(viewingInvoice);
       return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">View bill</h2></div><section className="im-panel" style={{ textAlign: 'center' }}><div className="bill-preview">{billContent}</div><BillActions invoice={viewingInvoice} /><button className="im-primary" style={{ marginTop: '8px' }} onClick={() => setViewingInvoice(null)}>← Back to customer</button></section></>;
     }
-    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">{selected.name} <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--muted)' }}>({selected.type})</span></h2></div><section className="im-panel"><h3 style={{ marginTop: 0, marginBottom: '16px' }}>New bill</h3><form onSubmit={(e) => { e.preventDefault(); setStage('confirm'); }}><div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}><label style={{ flex: 1 }}>Date<input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label><button type="button" className="im-secondary" onClick={() => { setCustomerId(''); setStage('select-customer'); }}>Change customer</button></div><div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Qty</th><th>Price/Packet</th><th>Total</th><th /></tr></thead><tbody>{lines.map((line, idx) => { const product = data.products.find(p => p.id === line.productId); const stock = product ? storage.getProductStock(product.id) : 0; return <tr key={idx}><td><select value={line.productId} onChange={(e) => { const p = data.products.find(x => x.id === e.target.value); setLines(lines.map((l, i) => i === idx ? { ...l, productId: e.target.value, pricePerPacketPaise: p ? priceForCustomer(p) : 0 } : l)); }}><option value="">Select…</option>{data.products.map((p) => <option key={p.id} value={p.id}>{p.name} ({stock > 0 ? `${stock} in stock` : 'out'})</option>)}</select></td><td><input type="number" min="0" step="1" value={line.quantity} onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: Number(e.target.value) } : l))} /></td><td>{money(line.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{money(line.quantity * line.pricePerPacketPaise)}</td><td>{lines.length > 1 && <button type="button" className="im-remove" onClick={() => setLines(lines.filter((_, i) => i !== idx))}>×</button>}</td></tr>; })}</tbody></table></div><button type="button" className="im-secondary" onClick={() => setLines([...lines, { productId: '', quantity: 0, pricePerPacketPaise: 0 }])}>+ Add line</button><button type="submit" className="im-primary">Continue to payment</button></form></section><section className="im-panel" style={{ marginTop: '24px' }}><div className="im-panel-title"><h2>Bill history</h2><span>{customerSalesHistory.length} total</span></div>{customerSalesHistory.length === 0 ? <div className="im-empty"><b>No bills yet</b><p>Bills will appear here once you generate sales for this customer.</p></div> : <div style={{ display: 'grid', gap: '10px' }}>{customerSalesHistory.map((sale) => <div key={sale.id} style={{ border: '1px solid var(--line)', borderRadius: '8px', padding: '12px 14px', background: '#fbfcf8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{sale.date}</div><small style={{ color: 'var(--muted)', fontSize: '12px' }}>{sale.lines.length} item{sale.lines.length === 1 ? '' : 's'} · {money(sale.totalPaise)}</small></div><div style={{ display: 'flex', gap: '6px' }}><button type="button" className="im-secondary" style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 600 }} onClick={() => setViewingInvoice(sale)}>View</button><button type="button" style={{ background: 'transparent', border: '1px solid var(--line)', borderRadius: '4px', padding: '6px 12px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', color: 'var(--muted)' }} onClick={() => { setViewingInvoice(sale); setTimeout(() => window.print(), 100); }}>Print</button></div></div>)}</div>}</section></>;
+    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">{selected.name} <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--muted)' }}>({selected.type})</span></h2></div><section className="im-panel"><h3 style={{ marginTop: 0, marginBottom: '16px' }}>New bill</h3><form onSubmit={(e) => { e.preventDefault(); setStage('confirm'); }}><div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}><label style={{ flex: 1 }}>Date<input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label><button type="button" className="im-secondary" onClick={() => { setCustomerId(''); setStage('select-customer'); }}>Change customer</button></div><div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Qty</th><th>Price/Packet</th><th>Total</th><th /></tr></thead><tbody>{lines.map((line, idx) => { const product = data.products.find(p => p.id === line.productId); return <tr key={idx}><td><select value={line.productId} onChange={(e) => { const p = data.products.find(x => x.id === e.target.value); setLines(lines.map((l, i) => i === idx ? { ...l, productId: e.target.value, pricePerPacketPaise: p ? priceForCustomer(p) : 0 } : l)); }}><option value="">Select…</option>{data.products.map((p) => { const piStock = p.productionItemId ? storage.getProductionItemStock(p.productionItemId) : null; const label = piStock == null ? '' : piStock > 0 ? ` (${piStock} pcs)` : ' (out)'; return <option key={p.id} value={p.id}>{p.name}{label}</option>; })}</select></td><td><input type="number" min="0" step="1" value={line.quantity} onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: Number(e.target.value) } : l))} /></td><td>{money(line.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{money(line.quantity * line.pricePerPacketPaise)}</td><td>{lines.length > 1 && <button type="button" className="im-remove" onClick={() => setLines(lines.filter((_, i) => i !== idx))}>×</button>}</td></tr>; })}</tbody></table></div><button type="button" className="im-secondary" onClick={() => setLines([...lines, { productId: '', quantity: 0, pricePerPacketPaise: 0 }])}>+ Add line</button><button type="submit" className="im-primary">Continue to payment</button></form></section><section className="im-panel" style={{ marginTop: '24px' }}><div className="im-panel-title"><h2>Bill history</h2><span>{customerSalesHistory.length} total</span></div>{customerSalesHistory.length === 0 ? <div className="im-empty"><b>No bills yet</b><p>Bills will appear here once you generate sales for this customer.</p></div> : <div style={{ display: 'grid', gap: '10px' }}>{customerSalesHistory.map((sale) => <div key={sale.id} style={{ border: '1px solid var(--line)', borderRadius: '8px', padding: '12px 14px', background: '#fbfcf8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{sale.date}</div><small style={{ color: 'var(--muted)', fontSize: '12px' }}>{sale.lines.length} item{sale.lines.length === 1 ? '' : 's'} · {money(sale.totalPaise)}</small></div><div style={{ display: 'flex', gap: '6px' }}><button type="button" className="im-secondary" style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 600 }} onClick={() => setViewingInvoice(sale)}>View</button><button type="button" style={{ background: 'transparent', border: '1px solid var(--line)', borderRadius: '4px', padding: '6px 12px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', color: 'var(--muted)' }} onClick={() => { setViewingInvoice(sale); setTimeout(() => window.print(), 100); }}>Print</button></div></div>)}</div>}</section></>;
   }
 
   if (stage === 'confirm' && selected) {

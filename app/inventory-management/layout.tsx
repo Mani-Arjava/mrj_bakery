@@ -48,6 +48,7 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
     { href: '/inventory-management/suppliers', label: 'Suppliers' },
     { href: '/inventory-management/purchases', label: 'Purchases' },
     { href: '/inventory-management/products', label: 'Products' },
+    { href: '/inventory-management/recipes', label: 'Recipes' },
     { href: '/inventory-management/production', label: 'Production' },
     { href: '/inventory-management/customers', label: 'Customers' },
     { href: '/inventory-management/billing', label: 'Billing' }

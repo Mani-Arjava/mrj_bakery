@@ -1,1 +1,1 @@
-export type { InventoryData, InventoryItem as Item, Purchase, PurchaseLine, Supplier } from './storage';
+export type { InventoryData, InventoryItem as Item, Purchase, PurchaseLine, Supplier, ProductionItem, Recipe, RecipeIngredient } from './storage';
