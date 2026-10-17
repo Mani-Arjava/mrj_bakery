@@ -400,7 +400,6 @@ ${sep}`;
     return (
       <div className="bill-action-row">
         <button className="im-secondary" onClick={() => shareAsPdf(content, invoice.customerName)}>Share PDF</button>
-        <button className="im-secondary" onClick={() => sendWhatsApp(content, invoice.customerName)}>WhatsApp</button>
         <button className="im-secondary" onClick={() => savePdf(content, invoice.customerName)}>Save PDF</button>
         <button className="im-secondary" onClick={() => window.print()}>Print</button>
       </div>
