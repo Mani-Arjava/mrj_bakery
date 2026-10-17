@@ -342,6 +342,10 @@ export function getDailyProduction(date: string) {
   return getData().productionBatches.filter(b => b.date === date).sort((a, b) => b.id.localeCompare(a.id));
 }
 
+export function getAllProductionBatches() {
+  return getData().productionBatches.sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+}
+
 export function updateProductionBatch(batchId: string, input: Omit<ProductionBatch, 'id'>) {
   const data = getData();
   const batch = data.productionBatches.find(b => b.id === batchId);

@@ -599,7 +599,7 @@ export function ProductionWorkspace() {
       run(() => storage.deleteProductionBatch(batch.id));
   }
 
-  const dailyProduction = storage.getDailyProduction(date);
+  const allProduction = storage.getAllProductionBatches();
   const currentStock = selectedProdItem ? storage.getProductionItemStock(selectedProdItem.id) : null;
 
   return <>
@@ -607,9 +607,33 @@ export function ProductionWorkspace() {
     <div className="im-section-actions"><div><p className="im-kicker">PRODUCTION</p><h2 className="im-page-title">Record daily production</h2></div></div>
 
     <section className="im-panel">
+      <div className="im-panel-title"><h2>Current stock</h2><span>{data.productionItems.length} items</span></div>
       {data.productionItems.length === 0 ? (
-        <p className="im-muted">No production items defined yet. Add them on the <b>Recipes</b> page first.</p>
+        <Empty title="No production items defined" text="Add production items on the Recipes page first, then come back to record production." />
       ) : (
+        <div className="im-table-scroll">
+          <table>
+            <thead><tr><th>Production item</th><th>Unit</th><th>Stock</th></tr></thead>
+            <tbody>
+              {data.productionItems.map(pi => {
+                const stock = storage.getProductionItemStock(pi.id);
+                return (
+                  <tr key={pi.id}>
+                    <td><b>{pi.name}</b></td>
+                    <td>{pi.productionUnit}</td>
+                    <td><span className={`im-status ${stock > 0 ? 'settled' : 'due'}`}>{stock} pcs</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+
+    {data.productionItems.length > 0 && (
+      <section className="im-panel">
+        <h3 style={{ marginTop: 0 }}>{editingBatch ? 'Edit production entry' : 'Add production'}</h3>
         <form onSubmit={handleSubmit}>
           <div className="im-three">
             <label>Date
@@ -631,7 +655,7 @@ export function ProductionWorkspace() {
             </label>
           </div>
 
-          {selectedProdItem && productionQty && (
+          {selectedProdItem && (
             <div className="im-two">
               <label>Pieces produced
                 <input type="number" min="0" step="1" value={piecesValue}
@@ -648,7 +672,6 @@ export function ProductionWorkspace() {
                   Current stock: <b>{currentStock} pcs</b>
                   {autoPieces != null && (() => {
                     const newPieces = piecesOverride !== '' ? Number(piecesOverride) : autoPieces;
-                    // In edit mode, current stock already includes the old batch; subtract it before adding new
                     const afterStock = editingBatch
                       ? currentStock - editingBatch.piecesProduced + newPieces
                       : currentStock + newPieces;
@@ -680,25 +703,26 @@ export function ProductionWorkspace() {
             <button type="submit" className="im-primary">{editingBatch ? 'Update production' : 'Record production'}</button>
           </div>
         </form>
-      )}
-    </section>
+      </section>
+    )}
 
     <section className="im-panel">
       <div className="im-panel-title">
-        <h2>Production for {date}</h2>
-        <span>{dailyProduction.length} batch{dailyProduction.length === 1 ? '' : 'es'}</span>
+        <h2>Production history</h2>
+        <span>{allProduction.length} batch{allProduction.length === 1 ? '' : 'es'}</span>
       </div>
-      {dailyProduction.length === 0 ? (
-        <Empty title="No production recorded" text="Production entries for this date will appear here." />
+      {allProduction.length === 0 ? (
+        <Empty title="No production recorded yet" text="Production entries will appear here once you start recording." />
       ) : (
         <div className="im-table-scroll">
           <table>
             <thead>
-              <tr><th>Item</th><th>Quantity</th><th>Pieces</th><th>Notes</th><th>Actions</th></tr>
+              <tr><th>Date</th><th>Item</th><th>Quantity</th><th>Pieces</th><th>Notes</th><th>Actions</th></tr>
             </thead>
             <tbody>
-              {dailyProduction.map((batch) => (
+              {allProduction.map((batch) => (
                 <tr key={batch.id}>
+                  <td>{batch.date}</td>
                   <td><b>{batch.productionItemName}</b></td>
                   <td style={{ fontWeight: 600 }}>{batch.productionQuantity} {batch.productionUnit}</td>
                   <td style={{ fontWeight: 600 }}>{batch.piecesProduced} pcs</td>
