@@ -237,6 +237,11 @@ export function RecipesWorkspace() {
             <p className="im-muted" style={{ marginBottom: '12px' }}>
               Enter quantity of each raw material needed per 1 {selectedItem.productionUnit} of {selectedItem.name}.
             </p>
+            {data.items.filter(it => it.quantity > 0).length === 0 && (
+              <p className="im-muted" style={{ marginBottom: '12px', color: '#a43932' }}>
+                No items in stock. Purchase items first to add ingredients.
+              </p>
+            )}
             <div className="im-table-scroll" style={{ marginBottom: '12px' }}>
               <table>
                 <thead><tr><th>Raw material</th><th>Qty per 1 {selectedItem.productionUnit}</th><th></th></tr></thead>
@@ -246,7 +251,7 @@ export function RecipesWorkspace() {
                       <td>
                         <select value={draft.itemId} onChange={e => updateDraft(idx, { itemId: e.target.value })}>
                           <option value="">Select item…</option>
-                          {data.items.map(it => <option key={it.id} value={it.id}>{it.name} ({it.unit})</option>)}
+                          {data.items.filter(it => it.quantity > 0).map(it => <option key={it.id} value={it.id}>{it.name} ({it.unit})</option>)}
                         </select>
                       </td>
                       <td>
@@ -405,7 +410,7 @@ export function ProductsWorkspace() {
   const { data, run, notice, error } = useSimpleInventory();
   const [editing, setEditing] = useState<storage.Product | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', count: '', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' });
+  const [form, setForm] = useState({ name: '', count: '', conversionUnit: 'KG' as 'KG' | 'Tray', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' });
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -414,10 +419,10 @@ export function ProductsWorkspace() {
     const count = form.count !== '' ? Number(form.count) : undefined;
     const productionItemId = form.productionItemId || undefined;
     run(() => {
-      if (editing) storage.updateProduct(editing.id, { name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale, count, productionItemId });
-      else storage.addProduct({ name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale, count, productionItemId });
+      if (editing) storage.updateProduct(editing.id, { name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale, count, conversionUnit: form.conversionUnit, productionItemId });
+      else storage.addProduct({ name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale, count, conversionUnit: form.conversionUnit, productionItemId });
     });
-    setForm({ name: '', count: '', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' });
+    setForm({ name: '', count: '', conversionUnit: 'KG', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' });
     setEditing(null);
     setShowForm(false);
   }
@@ -427,6 +432,7 @@ export function ProductsWorkspace() {
     setForm({
       name: product.name,
       count: product.count != null ? String(product.count) : '',
+      conversionUnit: product.conversionUnit ?? 'KG',
       pricePerPacketPaise: product.pricePerPacketPaise,
       wholesalePricePerPacketPaise: product.wholesalePricePerPacketPaise != null ? String(product.wholesalePricePerPacketPaise / 100) : '',
       productionItemId: product.productionItemId ?? '',
@@ -439,13 +445,11 @@ export function ProductsWorkspace() {
     if (window.confirm(`Delete ${product.name}? This cannot be undone.`)) run(() => storage.deleteProduct(product.id));
   }
 
-  const linkedProdItem = data.productionItems.find(pi => pi.id === form.productionItemId);
-
   return <>
     <Feedback notice={notice} error={error} />
     <div className="im-section-actions">
       <div><p className="im-kicker">PRODUCTS</p><h2 className="im-page-title">Manage products & pricing</h2></div>
-      <button className="im-primary" onClick={() => { setEditing(null); setForm({ name: '', count: '', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' }); setShowForm(true); }}>+ Add product</button>
+      <button className="im-primary" onClick={() => { setEditing(null); setForm({ name: '', count: '', conversionUnit: 'KG', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' }); setShowForm(true); }}>+ Add product</button>
     </div>
 
     {showForm && (
@@ -453,10 +457,19 @@ export function ProductsWorkspace() {
         <h3>{editing ? 'Edit product' : 'New product'}</h3>
         <form onSubmit={handleSubmit}>
           <label>Product name<input required autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. 20-Piece Roll Cake" /></label>
-          <label>Pieces per packet (count)
-            <input type="number" step="1" min="1" value={form.count} onChange={(e) => setForm({ ...form, count: e.target.value })} placeholder="e.g. 20" />
-            <small style={{ color: 'var(--muted)' }}>Number of pieces in one packet</small>
-          </label>
+          <div style={{ marginBottom: '16px' }}>
+            <span style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>Unit conversion</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <select value={form.conversionUnit} onChange={(e) => setForm({ ...form, conversionUnit: e.target.value as 'KG' | 'Tray' })} style={{ width: 'auto' }}>
+                <option value="KG">KG</option>
+                <option value="Tray">Tray</option>
+              </select>
+              <span style={{ color: 'var(--muted)', fontSize: '13px', whiteSpace: 'nowrap' }}>1 {form.conversionUnit} =</span>
+              <input type="number" step="1" min="1" value={form.count} onChange={(e) => setForm({ ...form, count: e.target.value })} placeholder="e.g. 20" style={{ width: '80px' }} />
+              <span style={{ color: 'var(--muted)', fontSize: '13px' }}>pieces</span>
+            </div>
+            <small style={{ color: 'var(--muted)', display: 'block', marginTop: '4px' }}>Number of pieces in one packet</small>
+          </div>
           <label>Retail price per packet (₹)<input required type="number" step="0.01" min="0" value={form.pricePerPacketPaise / 100} onChange={(e) => setForm({ ...form, pricePerPacketPaise: Math.round(Number(e.target.value) * 100) })} /></label>
           <label>Wholesale price per packet (₹) <span style={{ fontWeight: 400, color: 'var(--muted)' }}>optional</span>
             <input type="number" step="0.01" min="0" value={form.wholesalePricePerPacketPaise} onChange={(e) => setForm({ ...form, wholesalePricePerPacketPaise: e.target.value })} placeholder="Leave blank to use retail price" />
@@ -468,11 +481,6 @@ export function ProductsWorkspace() {
             </select>
             {data.productionItems.length === 0 && <small style={{ color: 'var(--muted)' }}>Create production items on the Recipes page first.</small>}
           </label>
-          {linkedProdItem && (
-            <p className="im-muted" style={{ marginTop: 0 }}>
-              Unit conversion: 1 {linkedProdItem.productionUnit} = {linkedProdItem.piecesPerUnit} pieces
-            </p>
-          )}
           <div style={{ display: 'flex', gap: '8px' }}>
             <button type="button" className="im-secondary" onClick={() => setShowForm(false)}>Cancel</button>
             <button type="submit" className="im-primary">Save</button>
@@ -489,20 +497,18 @@ export function ProductsWorkspace() {
         <div className="im-table-scroll">
           <table>
             <thead>
-              <tr><th>Product</th><th>Count</th><th>Retail Price</th><th>Wholesale Price</th><th>Production Item</th><th>Stock</th><th>Actions</th></tr>
+              <tr><th>Product</th><th>Conversion</th><th>Retail Price</th><th>Wholesale Price</th><th>Production Item</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {data.products.map((product) => {
                 const prodItem = product.productionItemId ? data.productionItems.find(pi => pi.id === product.productionItemId) : undefined;
-                const stock = prodItem ? storage.getProductionItemStock(prodItem.id) : null;
                 return (
                   <tr key={product.id}>
                     <td><b>{product.name}</b></td>
-                    <td>{product.count ?? '—'}</td>
+                    <td>{product.count ? `1 ${product.conversionUnit ?? 'KG'} = ${product.count} pcs` : '—'}</td>
                     <td>{money(product.pricePerPacketPaise)}</td>
                     <td>{product.wholesalePricePerPacketPaise != null ? money(product.wholesalePricePerPacketPaise) : '—'}</td>
                     <td>{prodItem ? prodItem.name : <span style={{ color: 'var(--muted)' }}>—</span>}</td>
-                    <td style={{ fontWeight: 600 }}>{stock != null ? `${stock} pcs` : '—'}</td>
                     <td><div className="row-actions"><button className="action-edit" onClick={() => editProduct(product)}>Edit</button><button className="action-delete" onClick={() => removeProduct(product)}>Delete</button></div></td>
                   </tr>
                 );
@@ -640,7 +646,14 @@ export function ProductionWorkspace() {
               {currentStock != null && (
                 <div style={{ alignSelf: 'flex-end', padding: '8px 0', color: 'var(--muted)', fontSize: '13px' }}>
                   Current stock: <b>{currentStock} pcs</b>
-                  {autoPieces != null && <> → after: <b>{currentStock + (piecesOverride !== '' ? Number(piecesOverride) : autoPieces)} pcs</b></>}
+                  {autoPieces != null && (() => {
+                    const newPieces = piecesOverride !== '' ? Number(piecesOverride) : autoPieces;
+                    // In edit mode, current stock already includes the old batch; subtract it before adding new
+                    const afterStock = editingBatch
+                      ? currentStock - editingBatch.piecesProduced + newPieces
+                      : currentStock + newPieces;
+                    return <> → after: <b>{afterStock} pcs</b></>;
+                  })()}
                 </div>
               )}
             </div>

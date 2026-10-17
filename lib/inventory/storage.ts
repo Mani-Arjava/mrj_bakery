@@ -13,7 +13,7 @@ export type RecipeIngredient = { itemId: string; itemName: string; quantityPerUn
 export type Recipe = { id: string; productionItemId: string; ingredients: RecipeIngredient[] };
 
 // Finished goods / packaging variants sold to customers
-export type Product = { id: string; name: string; pricePerPacketPaise: number; wholesalePricePerPacketPaise?: number; createdAt: string; productionItemId?: string; count?: number };
+export type Product = { id: string; name: string; pricePerPacketPaise: number; wholesalePricePerPacketPaise?: number; createdAt: string; productionItemId?: string; count?: number; conversionUnit?: 'KG' | 'Tray' };
 
 export type ProductionBatch = { id: string; date: string; productionItemId: string; productionItemName: string; productionQuantity: number; productionUnit: 'KG' | 'Tray'; piecesProduced: number; notes?: string };
 export type Customer = { id: string; name: string; phone: string; type: 'wholesaler' | 'retailer'; outstandingPaise: number; advancePaise: number };
@@ -402,13 +402,20 @@ export function postSale(input: Omit<SaleInvoice, 'id'>) {
   const customer = data.customers.find(c => c.id === input.customerId);
   if (!customer) throw new Error('Customer not found.');
 
-  // Check stock availability (piece-based against production item)
+  // Aggregate pieces needed per production item first (multiple lines can share one item)
+  const neededByProductionItem: Record<string, number> = {};
   for (const line of input.lines) {
     const product = data.products.find(p => p.id === line.productId);
     if (product?.productionItemId) {
-      const piecesNeeded = line.quantityPackets * (product.count ?? 1);
-      const piecesAvailable = getProductionItemStockFromData(data, product.productionItemId);
-      if (piecesAvailable < piecesNeeded) throw new Error(`Insufficient stock for ${line.productName}`);
+      neededByProductionItem[product.productionItemId] =
+        (neededByProductionItem[product.productionItemId] ?? 0) + line.quantityPackets * (product.count ?? 1);
+    }
+  }
+  for (const [piId, needed] of Object.entries(neededByProductionItem)) {
+    const available = getProductionItemStockFromData(data, piId);
+    if (available < needed) {
+      const pi = data.productionItems.find(p => p.id === piId);
+      throw new Error(`Insufficient stock for ${pi?.name ?? piId} (need ${needed} pcs, have ${available} pcs)`);
     }
   }
 
