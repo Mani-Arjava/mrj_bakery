@@ -351,44 +351,57 @@ ${sep}`;
     return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Canvas toBlob failed')), 'image/png', 1.0));
   }
 
-  async function shareAsImage(content: string, customerName: string) {
-    const blob = await generateBillBlob(content);
-    const file = new File([blob], `bill-${customerName}.png`, { type: 'image/png' });
+  async function generatePdfBlob(content: string): Promise<Blob> {
+    const imgBlob = await generateBillBlob(content);
+    const imgUrl = URL.createObjectURL(imgBlob);
+    const img = new Image();
+    img.src = imgUrl;
+    await new Promise(resolve => { img.onload = resolve; });
+    const widthMm = 80;
+    const heightMm = (img.naturalHeight / img.naturalWidth) * widthMm;
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ format: [widthMm, heightMm], unit: 'mm', orientation: 'portrait' });
+    doc.addImage(img, 'PNG', 0, 0, widthMm, heightMm);
+    URL.revokeObjectURL(imgUrl);
+    return doc.output('blob');
+  }
+
+  async function shareAsPdf(content: string, customerName: string) {
+    const blob = await generatePdfBlob(content);
+    const file = new File([blob], `bill-${customerName}.pdf`, { type: 'application/pdf' });
     if (navigator.canShare?.({ files: [file] })) {
       try { await navigator.share({ title: `Bill — ${customerName}`, files: [file] }); return; } catch { /* cancelled */ }
     }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `bill-${customerName}.png`; a.click();
+    a.href = url; a.download = `bill-${customerName}.pdf`; a.click();
     URL.revokeObjectURL(url);
   }
 
   async function sendWhatsApp(content: string, customerName: string) {
-    const blob = await generateBillBlob(content);
-    const file = new File([blob], `bill-${customerName}.png`, { type: 'image/png' });
+    const blob = await generatePdfBlob(content);
+    const file = new File([blob], `bill-${customerName}.pdf`, { type: 'application/pdf' });
     if (navigator.canShare?.({ files: [file] })) {
       try { await navigator.share({ title: `Bill — ${customerName}`, files: [file] }); return; } catch { /* cancelled */ }
     }
     window.open(`https://wa.me/?text=${encodeURIComponent(content)}`, '_blank', 'noopener');
   }
 
-  function savePdf(content: string, billId: string) {
-    const win = window.open('', '_blank', 'width=520,height=720,noopener');
-    if (!win) return;
-    const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bill ${billId} - MRJ Best Bakery</title><style>body{font-family:'Courier New',Courier,monospace;white-space:pre;font-size:13px;line-height:1.5;margin:10mm;color:#000}@page{size:A5;margin:10mm}</style></head><body>${escaped}</body></html>`);
-    win.document.close();
-    win.focus();
-    win.print();
+  async function savePdf(content: string, customerName: string) {
+    const blob = await generatePdfBlob(content);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `bill-${customerName}.pdf`; a.click();
+    URL.revokeObjectURL(url);
   }
 
   function BillActions({ invoice }: { invoice: any }) {
     const content = generateBillContent(invoice);
     return (
       <div className="bill-action-row">
-        <button className="im-secondary" onClick={() => shareAsImage(content, invoice.customerName)}>Share Image</button>
+        <button className="im-secondary" onClick={() => shareAsPdf(content, invoice.customerName)}>Share PDF</button>
         <button className="im-secondary" onClick={() => sendWhatsApp(content, invoice.customerName)}>WhatsApp</button>
-        <button className="im-secondary" onClick={() => savePdf(content, invoice.id.slice(0, 8).toUpperCase())}>Save PDF</button>
+        <button className="im-secondary" onClick={() => savePdf(content, invoice.customerName)}>Save PDF</button>
         <button className="im-secondary" onClick={() => window.print()}>Print</button>
       </div>
     );
