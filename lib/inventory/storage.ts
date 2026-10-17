@@ -8,9 +8,9 @@ export type PurchaseLine = { itemId: string; itemName: string; quantity: number;
 export type Purchase = { id: string; date: string; supplierId: string; supplierName: string; lines: PurchaseLine[]; totalPaise: number; paidPaise: number };
 
 // Finished goods (distinct from raw materials)
-export type Product = { id: string; name: string; pricePerPacketPaise: number; createdAt: string };
+export type Product = { id: string; name: string; pricePerPacketPaise: number; wholesalePricePerPacketPaise?: number; createdAt: string };
 export type ProductionBatch = { id: string; date: string; productId: string; productName: string; quantityPackets: number; notes?: string };
-export type Customer = { id: string; name: string; phone: string; outstandingPaise: number; advancePaise: number };
+export type Customer = { id: string; name: string; phone: string; type: 'wholesaler' | 'retailer'; outstandingPaise: number; advancePaise: number };
 export type SaleLine = { productId: string; productName: string; quantityPackets: number; pricePerPacketPaise: number; totalPaise: number };
 export type SaleInvoice = { id: string; date: string; customerId: string; customerName: string; lines: SaleLine[]; totalPaise: number; paidPaise: number; outstandingPaise: number };
 export type StockMovement = { id: string; date: string; productId: string; quantityPackets: number; movementType: 'PRODUCTION' | 'SALE'; sourceId: string };
@@ -35,7 +35,7 @@ export function getData(): InventoryData {
       purchases: Array.isArray(parsed.purchases) ? parsed.purchases : [],
       products: Array.isArray(parsed.products) ? parsed.products : [],
       productionBatches: Array.isArray(parsed.productionBatches) ? parsed.productionBatches : [],
-      customers: Array.isArray(parsed.customers) ? parsed.customers : [],
+      customers: Array.isArray(parsed.customers) ? parsed.customers.map((c: any) => ({ ...c, type: c.type ?? 'retailer' })) : [],
       saleInvoices: Array.isArray(parsed.saleInvoices) ? parsed.saleInvoices : [],
       stockMovements: Array.isArray(parsed.stockMovements) ? parsed.stockMovements : []
     };
@@ -164,6 +164,15 @@ export function updateProduct(productId: string, updates: Omit<Product, 'id' | '
   save(data);
 }
 
+export function deleteProduct(productId: string) {
+  const data = getData();
+  if (data.productionBatches.some(b => b.productId === productId)) throw new Error('This product has production history and cannot be deleted.');
+  if (data.saleInvoices.some(inv => inv.lines.some(l => l.productId === productId))) throw new Error('This product has sales history and cannot be deleted.');
+  data.products = data.products.filter(p => p.id !== productId);
+  data.stockMovements = data.stockMovements.filter(m => m.productId !== productId);
+  save(data);
+}
+
 export function getProductStock(productId: string): number {
   const data = getData();
   const movements = data.stockMovements.filter(m => m.productId === productId);
@@ -189,10 +198,31 @@ export function getDailyProduction(date: string) {
   return data.productionBatches.filter(b => b.date === date).sort((a, b) => b.id.localeCompare(a.id));
 }
 
-// ========== CUSTOMERS ==========
-export function addCustomer(input: Omit<Customer, 'id' | 'outstandingPaise' | 'advancePaise'>) {
+export function updateProductionBatch(batchId: string, input: Omit<ProductionBatch, 'id'>) {
   const data = getData();
-  const customer: Customer = { id: id(), ...input, outstandingPaise: 0, advancePaise: 0 };
+  const batch = data.productionBatches.find(b => b.id === batchId);
+  if (!batch) throw new Error('Production batch not found.');
+  data.stockMovements = data.stockMovements.filter(m => m.sourceId !== batchId);
+  Object.assign(batch, input);
+  const movement: StockMovement = { id: id(), date: input.date, productId: input.productId, quantityPackets: input.quantityPackets, movementType: 'PRODUCTION', sourceId: batchId };
+  data.stockMovements.push(movement);
+  save(data);
+}
+
+export function deleteProductionBatch(batchId: string) {
+  const data = getData();
+  const batch = data.productionBatches.find(b => b.id === batchId);
+  if (!batch) throw new Error('Production batch not found.');
+  data.stockMovements = data.stockMovements.filter(m => m.sourceId !== batchId);
+  data.productionBatches = data.productionBatches.filter(b => b.id !== batchId);
+  save(data);
+}
+
+// ========== CUSTOMERS ==========
+export function addCustomer(input: Omit<Customer, 'id' | 'outstandingPaise' | 'advancePaise'> & { previousBalancePaise?: number }) {
+  const data = getData();
+  const { previousBalancePaise, ...rest } = input;
+  const customer: Customer = { id: id(), ...rest, outstandingPaise: previousBalancePaise ?? 0, advancePaise: 0 };
   data.customers.push(customer);
   save(data);
   return customer;

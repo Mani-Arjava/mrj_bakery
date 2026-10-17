@@ -131,28 +131,33 @@ export function ProductsWorkspace() {
   const { data, run, refresh, notice, error } = useSimpleInventory();
   const [editing, setEditing] = useState<storage.Product | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', pricePerPacketPaise: 0 });
+  const [form, setForm] = useState({ name: '', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '' });
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!form.name) return;
+    const wholesale = form.wholesalePricePerPacketPaise !== '' ? Math.round(Number(form.wholesalePricePerPacketPaise) * 100) : undefined;
     run(() => {
-      if (editing) storage.updateProduct(editing.id, { name: form.name, pricePerPacketPaise: form.pricePerPacketPaise });
-      else storage.addProduct({ name: form.name, pricePerPacketPaise: form.pricePerPacketPaise });
+      if (editing) storage.updateProduct(editing.id, { name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale });
+      else storage.addProduct({ name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale });
     });
-    setForm({ name: '', pricePerPacketPaise: 0 });
+    setForm({ name: '', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '' });
     setEditing(null);
     setShowForm(false);
   }
 
   function editProduct(product: storage.Product) {
     setEditing(product);
-    setForm({ name: product.name, pricePerPacketPaise: product.pricePerPacketPaise });
+    setForm({ name: product.name, pricePerPacketPaise: product.pricePerPacketPaise, wholesalePricePerPacketPaise: product.wholesalePricePerPacketPaise != null ? String(product.wholesalePricePerPacketPaise / 100) : '' });
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">PRODUCTS</p><h2 className="im-page-title">Manage products & pricing</h2></div><button className="im-primary" onClick={() => { setEditing(null); setForm({ name: '', pricePerPacketPaise: 0 }); setShowForm(true); }}>+ Add product</button></div>{showForm && <section className="im-panel"><h3>{editing ? 'Edit product' : 'New product'}</h3><form onSubmit={handleSubmit}><label>Product name<input required autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label>Price per packet (₹)<input required type="number" step="0.01" min="0" value={form.pricePerPacketPaise / 100} onChange={(e) => setForm({ ...form, pricePerPacketPaise: Math.round(Number(e.target.value) * 100) })} /></label><div style={{ display: 'flex', gap: '8px' }}><button type="button" className="im-secondary" onClick={() => setShowForm(false)}>Cancel</button><button type="submit" className="im-primary">Save</button></div></form></section>}<section className="im-panel"><div className="im-panel-title"><h2>Products</h2><span>{data.products.length} total</span></div>{data.products.length === 0 ? <Empty title="No products yet" text="Add your first finished good to start tracking production and sales." /> : <div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Price/Packet</th><th>Current Stock</th><th>Actions</th></tr></thead><tbody>{data.products.map((product) => { const stock = storage.getProductStock(product.id); return <tr key={product.id}><td><b>{product.name}</b></td><td>{money(product.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{stock} packets</td><td><button className="action-edit" onClick={() => editProduct(product)}>Edit</button></td></tr>; })}</tbody></table></div>}</section></>;
+  function removeProduct(product: storage.Product) {
+    if (window.confirm(`Delete ${product.name}? This cannot be undone.`)) run(() => storage.deleteProduct(product.id));
+  }
+
+  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">PRODUCTS</p><h2 className="im-page-title">Manage products & pricing</h2></div><button className="im-primary" onClick={() => { setEditing(null); setForm({ name: '', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '' }); setShowForm(true); }}>+ Add product</button></div>{showForm && <section className="im-panel"><h3>{editing ? 'Edit product' : 'New product'}</h3><form onSubmit={handleSubmit}><label>Product name<input required autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label>Retail price per packet (₹)<input required type="number" step="0.01" min="0" value={form.pricePerPacketPaise / 100} onChange={(e) => setForm({ ...form, pricePerPacketPaise: Math.round(Number(e.target.value) * 100) })} /></label><label>Wholesale price per packet (₹) <span style={{ fontWeight: 400, color: 'var(--muted)' }}>optional</span><input type="number" step="0.01" min="0" value={form.wholesalePricePerPacketPaise} onChange={(e) => setForm({ ...form, wholesalePricePerPacketPaise: e.target.value })} placeholder="Leave blank to use retail price" /></label><div style={{ display: 'flex', gap: '8px' }}><button type="button" className="im-secondary" onClick={() => setShowForm(false)}>Cancel</button><button type="submit" className="im-primary">Save</button></div></form></section>}<section className="im-panel"><div className="im-panel-title"><h2>Products</h2><span>{data.products.length} total</span></div>{data.products.length === 0 ? <Empty title="No products yet" text="Add your first finished good to start tracking production and sales." /> : <div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Retail Price</th><th>Wholesale Price</th><th>Current Stock</th><th>Actions</th></tr></thead><tbody>{data.products.map((product) => { const stock = storage.getProductStock(product.id); return <tr key={product.id}><td><b>{product.name}</b></td><td>{money(product.pricePerPacketPaise)}</td><td>{product.wholesalePricePerPacketPaise != null ? money(product.wholesalePricePerPacketPaise) : '—'}</td><td style={{ fontWeight: 600 }}>{stock} packets</td><td><div className="row-actions"><button className="action-edit" onClick={() => editProduct(product)}>Edit</button><button className="action-delete" onClick={() => removeProduct(product)}>Delete</button></div></td></tr>; })}</tbody></table></div>}</section></>;
 }
 
 export function ProductionWorkspace() {
@@ -161,6 +166,7 @@ export function ProductionWorkspace() {
   const [productId, setProductId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [notes, setNotes] = useState('');
+  const [editingBatch, setEditingBatch] = useState<storage.ProductionBatch | null>(null);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -168,35 +174,54 @@ export function ProductionWorkspace() {
     run(() => {
       const product = data.products.find(p => p.id === productId);
       if (!product) throw new Error('Product not found');
-      storage.addProductionBatch({ date, productId, productName: product.name, quantityPackets: Number(quantity), notes: notes || undefined });
+      if (editingBatch) {
+        storage.updateProductionBatch(editingBatch.id, { date, productId, productName: product.name, quantityPackets: Number(quantity), notes: notes || undefined });
+      } else {
+        storage.addProductionBatch({ date, productId, productName: product.name, quantityPackets: Number(quantity), notes: notes || undefined });
+      }
     });
     setQuantity('');
     setNotes('');
+    setEditingBatch(null);
+  }
+
+  function startEdit(batch: storage.ProductionBatch) {
+    setEditingBatch(batch);
+    setDate(batch.date);
+    setProductId(batch.productId);
+    setQuantity(String(batch.quantityPackets));
+    setNotes(batch.notes || '');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function removeBatch(batch: storage.ProductionBatch) {
+    if (window.confirm(`Delete this production entry for ${batch.productName}? Stock will be reversed.`)) run(() => storage.deleteProductionBatch(batch.id));
   }
 
   const dailyProduction = storage.getDailyProduction(date);
 
-  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">PRODUCTION</p><h2 className="im-page-title">Record daily production</h2></div></div><section className="im-panel"><form onSubmit={handleSubmit}><div className="im-three"><label>Date<input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label><label>Product<select required value={productId} onChange={(e) => setProductId(e.target.value)}><option value="">Select product…</option>{data.products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label>Quantity (packets)<input required type="number" min="1" step="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></label></div><label>Notes<textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any production notes…" rows={2} /></label><button type="submit" className="im-primary">Record production</button></form></section><section className="im-panel"><div className="im-panel-title"><h2>Production for {date}</h2><span>{dailyProduction.length} batch{dailyProduction.length === 1 ? '' : 'es'}</span></div>{dailyProduction.length === 0 ? <Empty title="No production recorded" text="Production entries for this date will appear here." /> : <div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Packets</th><th>Notes</th></tr></thead><tbody>{dailyProduction.map((batch) => <tr key={batch.id}><td><b>{batch.productName}</b></td><td style={{ fontWeight: 600 }}>{batch.quantityPackets}</td><td>{batch.notes || '—'}</td></tr>)}</tbody></table></div>}</section></>;
+  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">PRODUCTION</p><h2 className="im-page-title">Record daily production</h2></div></div><section className="im-panel"><form onSubmit={handleSubmit}><div className="im-three"><label>Date<input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label><label>Product<select required value={productId} onChange={(e) => setProductId(e.target.value)}><option value="">Select product…</option>{data.products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label>Quantity (packets)<input required type="number" min="1" step="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></label></div><label>Notes<textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any production notes…" rows={2} /></label><div style={{ display: 'flex', gap: '8px' }}>{editingBatch && <button type="button" className="im-secondary" onClick={() => { setEditingBatch(null); setProductId(''); setQuantity(''); setNotes(''); }}>Cancel</button>}<button type="submit" className="im-primary">{editingBatch ? 'Update production' : 'Record production'}</button></div></form></section><section className="im-panel"><div className="im-panel-title"><h2>Production for {date}</h2><span>{dailyProduction.length} batch{dailyProduction.length === 1 ? '' : 'es'}</span></div>{dailyProduction.length === 0 ? <Empty title="No production recorded" text="Production entries for this date will appear here." /> : <div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Packets</th><th>Notes</th><th>Actions</th></tr></thead><tbody>{dailyProduction.map((batch) => <tr key={batch.id}><td><b>{batch.productName}</b></td><td style={{ fontWeight: 600 }}>{batch.quantityPackets}</td><td>{batch.notes || '—'}</td><td><div className="row-actions"><button className="action-edit" onClick={() => startEdit(batch)}>Edit</button><button className="action-delete" onClick={() => removeBatch(batch)}>Delete</button></div></td></tr>)}</tbody></table></div>}</section></>;
 }
 
 export function CustomersWorkspace() {
   const { data, run, refresh, notice, error } = useSimpleInventory();
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '' });
+  const [form, setForm] = useState({ name: '', phone: '', type: 'retailer' as 'wholesaler' | 'retailer', previousBalance: '' });
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!form.name) return;
-    run(() => storage.addCustomer({ name: form.name, phone: form.phone }));
-    setForm({ name: '', phone: '' });
+    const previousBalancePaise = form.previousBalance !== '' ? Math.round(Number(form.previousBalance) * 100) : undefined;
+    run(() => storage.addCustomer({ name: form.name, phone: form.phone, type: form.type, previousBalancePaise }));
+    setForm({ name: '', phone: '', type: 'retailer', previousBalance: '' });
     setShowForm(false);
   }
 
   const selected = selectedId ? data.customers.find(c => c.id === selectedId) : null;
   const salesHistory = selected ? storage.getSalesHistory(selected.id) : [];
 
-  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">CUSTOMERS</p><h2 className="im-page-title">Customer accounts</h2></div><button className="im-primary" onClick={() => { setForm({ name: '', phone: '' }); setShowForm(true); }}>+ Add customer</button></div>{showForm && <section className="im-panel"><h3>New customer</h3><form onSubmit={handleSubmit}><label>Name<input required autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label>Phone<input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label><div style={{ display: 'flex', gap: '8px' }}><button type="button" className="im-secondary" onClick={() => setShowForm(false)}>Cancel</button><button type="submit" className="im-primary">Save</button></div></form></section>}{selected ? <section className="im-panel"><h2>{selected.name}</h2><p style={{ color: 'var(--muted)' }}>{selected.phone || 'No phone'}</p><div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}><div style={{ flex: 1, padding: '12px', background: selected.outstandingPaise > 0 ? '#fee7e5' : '#e8f5e9', borderRadius: '4px' }}><small>Outstanding</small><div style={{ fontSize: '20px', fontWeight: 600, color: selected.outstandingPaise > 0 ? '#a43932' : '#2e7d32' }}>{money(selected.outstandingPaise)}</div></div><div style={{ flex: 1, padding: '12px', background: selected.advancePaise > 0 ? '#e3f2fd' : '#f5f5f5', borderRadius: '4px' }}><small>Advance</small><div style={{ fontSize: '20px', fontWeight: 600, color: selected.advancePaise > 0 ? '#0d47a1' : '#666' }}>{money(selected.advancePaise)}</div></div></div><button className="im-secondary" onClick={() => setSelectedId(null)}>← Back to list</button></section> : <section className="im-panel"><div className="im-panel-title"><h2>Customers</h2><span>{data.customers.length} total</span></div>{data.customers.length === 0 ? <Empty title="No customers yet" text="Add customers to track their purchase history and balance." /> : <div className="im-table-scroll"><table><thead><tr><th>Name</th><th>Phone</th><th>Outstanding</th><th>Advance</th></tr></thead><tbody>{data.customers.map((customer) => <tr key={customer.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedId(customer.id)}><td><b>{customer.name}</b></td><td>{customer.phone || '—'}</td><td style={{ color: customer.outstandingPaise > 0 ? '#a43932' : '#666' }}>{money(customer.outstandingPaise)}</td><td style={{ color: customer.advancePaise > 0 ? '#0d47a1' : '#666' }}>{money(customer.advancePaise)}</td></tr>)}</tbody></table></div>}</section>}</>;
+  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">CUSTOMERS</p><h2 className="im-page-title">Customer accounts</h2></div><button className="im-primary" onClick={() => { setForm({ name: '', phone: '', type: 'retailer', previousBalance: '' }); setShowForm(true); }}>+ Add customer</button></div>{showForm && <section className="im-panel"><h3>New customer</h3><form onSubmit={handleSubmit}><label>Name<input required autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label>Phone<input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label><label>Customer type<select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as 'wholesaler' | 'retailer' })}><option value="retailer">Retailer</option><option value="wholesaler">Wholesaler</option></select></label><label>Previous balance (₹) <span style={{ fontWeight: 400, color: 'var(--muted)' }}>optional — enter any opening dues</span><input type="number" min="0" step="0.01" value={form.previousBalance} onChange={(e) => setForm({ ...form, previousBalance: e.target.value })} placeholder="0" /></label><div style={{ display: 'flex', gap: '8px' }}><button type="button" className="im-secondary" onClick={() => setShowForm(false)}>Cancel</button><button type="submit" className="im-primary">Save</button></div></form></section>}{selected ? <section className="im-panel"><div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}><h2 style={{ margin: 0 }}>{selected.name}</h2><span className={`im-status ${selected.type === 'wholesaler' ? 'credit' : 'settled'}`} style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{selected.type}</span></div><p style={{ color: 'var(--muted)' }}>{selected.phone || 'No phone'}</p><div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}><div style={{ flex: 1, padding: '12px', background: selected.outstandingPaise > 0 ? '#fee7e5' : '#e8f5e9', borderRadius: '4px' }}><small>Outstanding</small><div style={{ fontSize: '20px', fontWeight: 600, color: selected.outstandingPaise > 0 ? '#a43932' : '#2e7d32' }}>{money(selected.outstandingPaise)}</div></div><div style={{ flex: 1, padding: '12px', background: selected.advancePaise > 0 ? '#e3f2fd' : '#f5f5f5', borderRadius: '4px' }}><small>Advance</small><div style={{ fontSize: '20px', fontWeight: 600, color: selected.advancePaise > 0 ? '#0d47a1' : '#666' }}>{money(selected.advancePaise)}</div></div></div><button className="im-secondary" onClick={() => setSelectedId(null)}>← Back to list</button></section> : <section className="im-panel"><div className="im-panel-title"><h2>Customers</h2><span>{data.customers.length} total</span></div>{data.customers.length === 0 ? <Empty title="No customers yet" text="Add customers to track their purchase history and balance." /> : <div className="im-table-scroll"><table><thead><tr><th>Name</th><th>Type</th><th>Phone</th><th>Outstanding</th><th>Advance</th></tr></thead><tbody>{data.customers.map((customer) => <tr key={customer.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedId(customer.id)}><td><b>{customer.name}</b></td><td><span className={`im-status ${customer.type === 'wholesaler' ? 'credit' : 'settled'}`}>{customer.type === 'wholesaler' ? 'Wholesaler' : 'Retailer'}</span></td><td>{customer.phone || '—'}</td><td style={{ color: customer.outstandingPaise > 0 ? '#a43932' : '#666' }}>{money(customer.outstandingPaise)}</td><td style={{ color: customer.advancePaise > 0 ? '#0d47a1' : '#666' }}>{money(customer.advancePaise)}</td></tr>)}</tbody></table></div>}</section>}</>;
 }
 
 export function BillingWorkspace() {
@@ -212,6 +237,11 @@ export function BillingWorkspace() {
   const selected = customerId ? data.customers.find(c => c.id === customerId) : null;
   const totalPaise = lines.reduce((sum, line) => sum + (line.quantity * line.pricePerPacketPaise), 0);
   const outstandingPaise = totalPaise - paid;
+
+  function priceForCustomer(product: storage.Product): number {
+    if (selected?.type === 'wholesaler' && product.wholesalePricePerPacketPaise != null) return product.wholesalePricePerPacketPaise;
+    return product.pricePerPacketPaise;
+  }
 
   function handleAddCustomer(e: FormEvent) {
     e.preventDefault();
@@ -258,59 +288,84 @@ export function BillingWorkspace() {
     const dash = '─────────────────────────────────────';
 
     let content = `${sep}
-     MRJ BEST BAKERY
+      MRJ BEST BAKERY
    12A Main Bazaar St.
    New Aayakudi, Palani
-  Phone: +91-8248395591
+   Phone: +91-8248395591
 ${sep}
 
-Bill #: ${invoice.id.slice(0, 8).toUpperCase()}  ${new Date(invoice.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
-Date: ${invoice.date}
-Customer: ${invoice.customerName}
+Bill #: ${invoice.id.slice(0, 8).toUpperCase()}
+Date  : ${invoice.date}
+Name  : ${invoice.customerName}
 
-Item            Qty  Price      Total
+Item            Qty    Price      Total
 ${dash}
 `;
 
     invoice.lines.forEach((l: any) => {
       const name = l.productName.substring(0, 15).padEnd(15);
       const qty = String(l.quantityPackets).padStart(4);
-      const price = `₹${(l.pricePerPacketPaise / 100).toFixed(2)}`.padStart(10);
-      const total = `₹${(l.totalPaise / 100).toFixed(2)}`.padStart(9);
-      content += `${name} ${qty} ${price} ${total}\n`;
+      const price = `₹${(l.pricePerPacketPaise / 100).toFixed(2)}`.padStart(9);
+      const total = `₹${(l.totalPaise / 100).toFixed(2)}`.padStart(10);
+      content += `${name} ${qty}  ${price}  ${total}\n`;
     });
 
     const totalItems = invoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0);
     const subtotal = `₹${(invoice.totalPaise / 100).toFixed(2)}`.padStart(14);
-    const paid = `₹${(invoice.paidPaise / 100).toFixed(2)}`.padStart(14);
+    const paidAmt = `₹${(invoice.paidPaise / 100).toFixed(2)}`.padStart(14);
     const outstanding = `₹${(invoice.outstandingPaise / 100).toFixed(2)}`.padStart(14);
 
     content += `${dash}
-Total Items: ${totalItems}
+Total Items :${totalItems}
 ${dash}
-Subtotal:${subtotal}
-${dash}
-Amount Paid:${paid}
-Outstanding:${outstanding}
+Subtotal    :${subtotal}
+Amount Paid :${paidAmt}
+Outstanding :${outstanding}
 ${sep}
 
-       Thank you for your purchase!
+      Thank you for your purchase!
 ${sep}`;
 
     return content;
   }
 
+  async function shareBill(content: string, customerName: string) {
+    const title = `Bill for ${customerName} — MRJ Best Bakery`;
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try { await navigator.share({ title, text: content }); return; } catch { /* user cancelled */ }
+    }
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      await navigator.clipboard.writeText(content);
+      alert('Bill copied to clipboard!');
+    }
+  }
+
+  function openWhatsApp(content: string) {
+    window.open(`https://wa.me/?text=${encodeURIComponent(content)}`, '_blank', 'noopener');
+  }
+
+  function BillActions({ invoice }: { invoice: any }) {
+    const content = generateBillContent(invoice);
+    return (
+      <div className="bill-action-row">
+        <button className="im-secondary" onClick={() => shareBill(content, invoice.customerName)}>Share</button>
+        <button className="im-secondary" onClick={() => openWhatsApp(content)}>WhatsApp</button>
+        <button className="im-secondary" onClick={() => window.print()}>Print</button>
+      </div>
+    );
+  }
+
   if (stage === 'select-customer') {
-    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Customer sales</h2></div><section className="im-panel"><form onSubmit={handleAddCustomer}><label>Select customer<select required value={customerId} onChange={(e) => setCustomerId(e.target.value)}><option value="">Choose a customer…</option>{data.customers.map((c) => <option key={c.id} value={c.id}>{c.name} {c.outstandingPaise > 0 && `(₹${(c.outstandingPaise / 100).toFixed(0)} due)`}</option>)}</select></label><button type="submit" className="im-primary">Next</button></form></section></>;
+    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Customer sales</h2></div><section className="im-panel"><form onSubmit={handleAddCustomer}><label>Select customer<select required value={customerId} onChange={(e) => setCustomerId(e.target.value)}><option value="">Choose a customer…</option>{data.customers.map((c) => <option key={c.id} value={c.id}>{c.name}{c.outstandingPaise > 0 ? ` (₹${(c.outstandingPaise / 100).toFixed(0)} due)` : ''}</option>)}</select></label><button type="submit" className="im-primary">Next</button></form></section></>;
   }
 
   if (stage === 'add-items' && selected) {
     const customerSalesHistory = storage.getSalesHistory(customerId);
     if (viewingInvoice) {
       const billContent = generateBillContent(viewingInvoice);
-      return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">View bill</h2></div><section className="im-panel" style={{ textAlign: 'center' }}><div className="bill-preview">{billContent}</div><div style={{ marginTop: '24px', display: 'flex', gap: '8px', justifyContent: 'center' }}><button className="im-secondary" onClick={() => window.print()}>🖨 Print receipt</button><button className="im-primary" onClick={() => setViewingInvoice(null)}>← Back to customer</button></div></section></>;
+      return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">View bill</h2></div><section className="im-panel" style={{ textAlign: 'center' }}><div className="bill-preview">{billContent}</div><BillActions invoice={viewingInvoice} /><button className="im-primary" style={{ marginTop: '8px' }} onClick={() => setViewingInvoice(null)}>← Back to customer</button></section></>;
     }
-    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">{selected.name}</h2></div><section className="im-panel"><h3 style={{ marginTop: 0, marginBottom: '16px' }}>New bill</h3><form onSubmit={(e) => { e.preventDefault(); setStage('confirm'); }}><div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}><label style={{ flex: 1 }}>Date<input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label><button type="button" className="im-secondary" onClick={() => { setCustomerId(''); setStage('select-customer'); }}>Change customer</button></div><div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Qty</th><th>Price/Packet</th><th>Total</th><th /></tr></thead><tbody>{lines.map((line, idx) => { const product = data.products.find(p => p.id === line.productId); const stock = product ? storage.getProductStock(product.id) : 0; return <tr key={idx}><td><select value={line.productId} onChange={(e) => { const p = data.products.find(x => x.id === e.target.value); setLines(lines.map((l, i) => i === idx ? { ...l, productId: e.target.value, pricePerPacketPaise: p?.pricePerPacketPaise || 0 } : l)); }}><option value="">Select…</option>{data.products.map((p) => <option key={p.id} value={p.id}>{p.name} ({stock > 0 ? `${stock} in stock` : 'out'})</option>)}</select></td><td><input type="number" min="0" step="1" value={line.quantity} onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: Number(e.target.value) } : l))} /></td><td>{money(line.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{money(line.quantity * line.pricePerPacketPaise)}</td><td>{lines.length > 1 && <button type="button" className="im-remove" onClick={() => setLines(lines.filter((_, i) => i !== idx))}>×</button>}</td></tr>; })}</tbody></table></div><button type="button" className="im-secondary" onClick={() => setLines([...lines, { productId: '', quantity: 0, pricePerPacketPaise: 0 }])}>+ Add line</button><button type="submit" className="im-primary">Continue to payment</button></form></section><section className="im-panel" style={{ marginTop: '24px' }}><div className="im-panel-title"><h2>Bill history</h2><span>{customerSalesHistory.length} total</span></div>{customerSalesHistory.length === 0 ? <div className="im-empty"><b>No bills yet</b><p>Bills will appear here once you generate sales for this customer.</p></div> : <div style={{ display: 'grid', gap: '10px' }}>{customerSalesHistory.map((sale) => <div key={sale.id} style={{ border: '1px solid var(--line)', borderRadius: '8px', padding: '12px 14px', background: '#fbfcf8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{sale.date}</div><small style={{ color: 'var(--muted)', fontSize: '12px' }}>{sale.lines.length} item{sale.lines.length === 1 ? '' : 's'} · {money(sale.totalPaise)}</small></div><div style={{ display: 'flex', gap: '6px' }}><button type="button" className="im-secondary" style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 600 }} onClick={() => setViewingInvoice(sale)}>View</button><button type="button" style={{ background: 'transparent', border: '1px solid var(--line)', borderRadius: '4px', padding: '6px 12px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', color: 'var(--muted)' }} onClick={() => { setViewingInvoice(sale); setTimeout(() => window.print(), 100); }}>🖨 Print</button></div></div>)}</div>}</section></>;
+    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">{selected.name} <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--muted)' }}>({selected.type})</span></h2></div><section className="im-panel"><h3 style={{ marginTop: 0, marginBottom: '16px' }}>New bill</h3><form onSubmit={(e) => { e.preventDefault(); setStage('confirm'); }}><div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}><label style={{ flex: 1 }}>Date<input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label><button type="button" className="im-secondary" onClick={() => { setCustomerId(''); setStage('select-customer'); }}>Change customer</button></div><div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Qty</th><th>Price/Packet</th><th>Total</th><th /></tr></thead><tbody>{lines.map((line, idx) => { const product = data.products.find(p => p.id === line.productId); const stock = product ? storage.getProductStock(product.id) : 0; return <tr key={idx}><td><select value={line.productId} onChange={(e) => { const p = data.products.find(x => x.id === e.target.value); setLines(lines.map((l, i) => i === idx ? { ...l, productId: e.target.value, pricePerPacketPaise: p ? priceForCustomer(p) : 0 } : l)); }}><option value="">Select…</option>{data.products.map((p) => <option key={p.id} value={p.id}>{p.name} ({stock > 0 ? `${stock} in stock` : 'out'})</option>)}</select></td><td><input type="number" min="0" step="1" value={line.quantity} onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: Number(e.target.value) } : l))} /></td><td>{money(line.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{money(line.quantity * line.pricePerPacketPaise)}</td><td>{lines.length > 1 && <button type="button" className="im-remove" onClick={() => setLines(lines.filter((_, i) => i !== idx))}>×</button>}</td></tr>; })}</tbody></table></div><button type="button" className="im-secondary" onClick={() => setLines([...lines, { productId: '', quantity: 0, pricePerPacketPaise: 0 }])}>+ Add line</button><button type="submit" className="im-primary">Continue to payment</button></form></section><section className="im-panel" style={{ marginTop: '24px' }}><div className="im-panel-title"><h2>Bill history</h2><span>{customerSalesHistory.length} total</span></div>{customerSalesHistory.length === 0 ? <div className="im-empty"><b>No bills yet</b><p>Bills will appear here once you generate sales for this customer.</p></div> : <div style={{ display: 'grid', gap: '10px' }}>{customerSalesHistory.map((sale) => <div key={sale.id} style={{ border: '1px solid var(--line)', borderRadius: '8px', padding: '12px 14px', background: '#fbfcf8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{sale.date}</div><small style={{ color: 'var(--muted)', fontSize: '12px' }}>{sale.lines.length} item{sale.lines.length === 1 ? '' : 's'} · {money(sale.totalPaise)}</small></div><div style={{ display: 'flex', gap: '6px' }}><button type="button" className="im-secondary" style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 600 }} onClick={() => setViewingInvoice(sale)}>View</button><button type="button" style={{ background: 'transparent', border: '1px solid var(--line)', borderRadius: '4px', padding: '6px 12px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', color: 'var(--muted)' }} onClick={() => { setViewingInvoice(sale); setTimeout(() => window.print(), 100); }}>Print</button></div></div>)}</div>}</section></>;
   }
 
   if (stage === 'confirm' && selected) {
@@ -319,7 +374,7 @@ ${sep}`;
 
   if (stage === 'preview' && lastInvoice) {
     const billContent = generateBillContent(lastInvoice);
-    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Bill generated</h2></div><section className="im-panel" style={{ textAlign: 'center' }}><div className="bill-preview">{billContent}</div><div style={{ marginTop: '24px', display: 'flex', gap: '8px', justifyContent: 'center' }}><button className="im-secondary" onClick={() => window.print()}>🖨 Print receipt</button><button className="im-primary" onClick={newBill}>New bill</button></div></section></>;
+    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Bill generated</h2></div><section className="im-panel" style={{ textAlign: 'center' }}><div className="bill-preview">{billContent}</div><BillActions invoice={lastInvoice} /><button className="im-primary" style={{ marginTop: '8px' }} onClick={newBill}>New bill</button></section></>;
   }
 
   return null;
