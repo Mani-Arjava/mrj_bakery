@@ -284,46 +284,48 @@ export function BillingWorkspace() {
   }
 
   function generateBillContent(invoice: any) {
-    const sep = '═════════════════════════════════════';
-    const dash = '─────────────────────────────────────';
+    const W = 43;
+    const sep  = '═'.repeat(W);
+    const dash = '─'.repeat(W);
+    const ctr  = (s: string) => s.padStart(Math.floor((W + s.length) / 2)).padEnd(W);
+    const HDR  = `${'Item'.padEnd(15)} ${'Qty'.padStart(4)}  ${'Rate'.padStart(9)}  ${'Total'.padStart(10)}`;
 
     let content = `${sep}
-      MRJ BEST BAKERY
-   12A Main Bazaar St.
-   New Aayakudi, Palani
-   Phone: +91-8248395591
+${ctr('MRJ BEST BAKERY')}
+${ctr('12A Main Bazaar St.')}
+${ctr('New Aayakudi, Palani')}
+${ctr('Phone: +91-8248395591')}
 ${sep}
 
 Bill #: ${invoice.id.slice(0, 8).toUpperCase()}
 Date  : ${invoice.date}
 Name  : ${invoice.customerName}
 
-Item            Qty    Price      Total
+${HDR}
 ${dash}
 `;
 
     invoice.lines.forEach((l: any) => {
-      const name = l.productName.substring(0, 15).padEnd(15);
-      const qty = String(l.quantityPackets).padStart(4);
-      const price = `₹${(l.pricePerPacketPaise / 100).toFixed(2)}`.padStart(9);
+      const name  = l.productName.substring(0, 15).padEnd(15);
+      const qty   = String(l.quantityPackets).padStart(4);
+      const rate  = `₹${(l.pricePerPacketPaise / 100).toFixed(2)}`.padStart(9);
       const total = `₹${(l.totalPaise / 100).toFixed(2)}`.padStart(10);
-      content += `${name} ${qty}  ${price}  ${total}\n`;
+      content += `${name} ${qty}  ${rate}  ${total}\n`;
     });
 
-    const totalItems = invoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0);
-    const subtotal = `₹${(invoice.totalPaise / 100).toFixed(2)}`.padStart(14);
-    const paidAmt = `₹${(invoice.paidPaise / 100).toFixed(2)}`.padStart(14);
-    const outstanding = `₹${(invoice.outstandingPaise / 100).toFixed(2)}`.padStart(14);
+    const totalItems  = invoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0);
+    const subtotal    = `₹${(invoice.totalPaise / 100).toFixed(2)}`.padStart(30);
+    const paidAmt     = `₹${(invoice.paidPaise / 100).toFixed(2)}`.padStart(30);
+    const outstanding = `₹${(invoice.outstandingPaise / 100).toFixed(2)}`.padStart(30);
 
     content += `${dash}
-Total Items :${totalItems}
+Total Items :${String(totalItems).padStart(30)}
 ${dash}
 Subtotal    :${subtotal}
 Amount Paid :${paidAmt}
 Outstanding :${outstanding}
 ${sep}
-
-      Thank you for your purchase!
+${ctr('Thank you for your purchase!')}
 ${sep}`;
 
     return content;
@@ -344,12 +346,23 @@ ${sep}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(content)}`, '_blank', 'noopener');
   }
 
+  function savePdf(content: string, billId: string) {
+    const win = window.open('', '_blank', 'width=520,height=720,noopener');
+    if (!win) return;
+    const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bill ${billId} - MRJ Best Bakery</title><style>body{font-family:'Courier New',Courier,monospace;white-space:pre;font-size:13px;line-height:1.5;margin:10mm;color:#000}@page{size:A5;margin:10mm}</style></head><body>${escaped}</body></html>`);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+
   function BillActions({ invoice }: { invoice: any }) {
     const content = generateBillContent(invoice);
     return (
       <div className="bill-action-row">
         <button className="im-secondary" onClick={() => shareBill(content, invoice.customerName)}>Share</button>
         <button className="im-secondary" onClick={() => openWhatsApp(content)}>WhatsApp</button>
+        <button className="im-secondary" onClick={() => savePdf(content, invoice.id.slice(0, 8).toUpperCase())}>Save PDF</button>
         <button className="im-secondary" onClick={() => window.print()}>Print</button>
       </div>
     );
