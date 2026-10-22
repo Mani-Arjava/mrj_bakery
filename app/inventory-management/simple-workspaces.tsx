@@ -795,7 +795,7 @@ export function BillingWorkspace() {
     const validLines = lines.filter(l => l.productId && l.quantity > 0);
     if (validLines.length === 0) return;
 
-    run(() => {
+    const ok = run(() => {
       const saleLines = validLines.map(line => {
         const product = data.products.find(p => p.id === line.productId);
         if (!product) throw new Error('Product not found');
@@ -803,15 +803,13 @@ export function BillingWorkspace() {
       });
       const invoice = storage.postSale({ date, customerId, customerName: selected.name, lines: saleLines, totalPaise, paidPaise: paid, outstandingPaise });
 
-      // Update customer balance
       const balance = storage.getCustomerBalance(customerId);
       storage.updateCustomer(customerId, { outstandingPaise: balance.outstandingPaise + outstandingPaise, advancePaise: balance.advancePaise });
 
-      // Store invoice for preview
       setLastInvoice({ ...invoice, customerName: selected.name });
     });
 
-    setStage('preview');
+    if (ok) setStage('preview');
   }
 
   function newBill() {
@@ -968,5 +966,6 @@ ${sep}`;
     return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Bill generated</h2></div><section className="im-panel" style={{ textAlign: 'center' }}><div className="bill-preview">{billContent}</div><BillActions invoice={lastInvoice} /><button className="im-primary" style={{ marginTop: '8px' }} onClick={newBill}>New bill</button></section></>;
   }
 
-  return null;
+  // Unreachable in normal flow — reset to a safe state if stage/data get out of sync
+  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Customer sales</h2></div><section className="im-panel"><form onSubmit={handleAddCustomer}><label>Select customer<select required value={customerId} onChange={(e) => setCustomerId(e.target.value)}><option value="">Choose a customer…</option>{data.customers.map((c) => <option key={c.id} value={c.id}>{c.name}{c.outstandingPaise > 0 ? ` (₹${(c.outstandingPaise / 100).toFixed(0)} due)` : ''}</option>)}</select></label><button type="submit" className="im-primary">Next</button></form></section></>;
 }
