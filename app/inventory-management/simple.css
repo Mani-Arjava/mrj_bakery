@@ -57,6 +57,10 @@ table th:nth-child(1){min-width:100px!important}
 /* Add item / New item button theme */
 .im-text-button{background:transparent;border:1px solid var(--line);border-radius:7px;color:var(--coffee);font:600 12px 'DM Sans';padding:9px 16px;cursor:pointer;transition:background .15s,border-color .15s}
 .im-text-button:hover{background:#f7faf4;border-color:#b7d0b0}
+/* Supplier card: label-value rows (no avatar) */
+.supplier-info-rows{display:grid;grid-template-columns:auto 1fr;gap:7px 14px;width:100%;align-items:center}
+.supplier-row-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+.supplier-row-value{font-size:13px;color:var(--ink);font-weight:600}
 /* Purchase history card footer — fix global footer dark-bg bleed, 2×2 grid */
 .purchase-history-card footer{background:transparent!important;color:var(--muted)!important;display:grid!important;grid-template-columns:auto 1fr!important;column-gap:10px!important;row-gap:5px!important;padding:10px 0 0!important;border-top:1px solid var(--line)!important;align-items:center!important;font-size:12px!important}
 .purchase-history-card footer span:nth-child(even){text-align:right!important;font-weight:600!important;color:var(--ink)!important}
