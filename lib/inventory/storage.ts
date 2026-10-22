@@ -11,7 +11,7 @@ const UNIT_NORMALIZE: Record<string, string> = {
 };
 function nu(unit: string): string { return UNIT_NORMALIZE[unit] ?? unit; }
 
-export type Supplier = { id: string; name: string; address: string; contactPerson: string; phone: string };
+export type Supplier = { id: string; name: string; address: string; contactPerson: string; phone: string; openingPendingPaise?: number; openingAdvancePaise?: number };
 export type InventoryItem = { id: string; name: string; unit: string; quantity: number };
 export type PurchaseLine = { itemId: string; itemName: string; quantity: number; unit: string; unitPricePaise: number; totalPaise: number };
 export type Purchase = { id: string; date: string; supplierId: string; supplierName: string; lines: PurchaseLine[]; totalPaise: number; paidPaise: number };
@@ -223,10 +223,14 @@ export function deletePurchase(purchaseId: string) {
 }
 
 export function getSupplierSummary(supplierId: string) {
-  const purchases = getData().purchases.filter((purchase) => purchase.supplierId === supplierId);
+  const data = getData();
+  const supplier = data.suppliers.find((s) => s.id === supplierId);
+  const purchases = data.purchases.filter((purchase) => purchase.supplierId === supplierId);
   const totalPurchasePaise = purchases.reduce((sum, purchase) => sum + purchase.totalPaise, 0);
   const totalPaidPaise = purchases.reduce((sum, purchase) => sum + purchase.paidPaise, 0);
-  const balancePaise = totalPurchasePaise - totalPaidPaise;
+  const openingPending = supplier?.openingPendingPaise ?? 0;
+  const openingAdvance = supplier?.openingAdvancePaise ?? 0;
+  const balancePaise = totalPurchasePaise - totalPaidPaise + openingPending - openingAdvance;
   return { purchases, totalPurchasePaise, totalPaidPaise, pendingPaise: Math.max(balancePaise, 0), advancePaise: Math.max(-balancePaise, 0) };
 }
 
