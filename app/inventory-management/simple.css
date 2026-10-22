@@ -33,3 +33,20 @@ table td:first-child{font-weight:600!important;color:var(--ink)!important}
 table thead th:nth-child(2),table thead th:nth-child(3),table thead th:nth-child(4){text-align:left!important}
 table td:nth-child(2),table td:nth-child(3),table td:nth-child(4){text-align:left!important}
 table th:nth-child(1){min-width:100px!important}
+/* ── Ingredient Edit Rows ── */
+.ingredient-rows{display:grid;gap:6px}
+.ingredient-row{display:grid;grid-template-columns:1fr 90px 44px auto;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid #f3ede6}
+.ingredient-row:last-child{border-bottom:none}
+.ingredient-row select,.ingredient-row input{display:block;width:100%;padding:9px 10px;border:1px solid #dbe2d8;border-radius:6px;font:13px 'DM Sans';background:#fcfdfb;color:var(--ink)}
+.ingredient-unit{font-size:11px;color:var(--muted);text-align:center}
+.ingredient-remove{background:transparent;border:1px solid #f0cbc5;border-radius:6px;color:#a43932;font-size:16px;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.ingredient-remove:hover{background:#fee7e5}
+@media(max-width:560px){.ingredient-row{grid-template-columns:1fr auto auto;row-gap:6px}.ingredient-row>select:first-child{grid-column:1/-1}}
+/* Fix: purchase-lines container must stay a grid (.im-panel form > div flex rule has higher specificity) */
+.im-purchase-lines{display:grid!important}
+/* Purchase balance note — stacked label + value per slot */
+.purchase-balance-note>div{display:flex;flex-direction:column;gap:2px}
+.purchase-balance-note>div>span{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.purchase-balance-note>div>strong{font-size:14px;color:var(--coffee)}
+/* Single-row compact layout on mobile — all fields on one line */
+@media(max-width:520px){.im-purchase-line{grid-template-columns:1fr 48px 54px 56px auto 28px!important;padding:8px 0!important;background:transparent!important;border-radius:0!important;border:none!important;border-bottom:1px solid #f3ede6!important;margin-bottom:0!important;gap:4px!important}.im-purchase-line>select:first-child{grid-column:auto!important}.im-purchase-line b{grid-column:auto!important;font-size:11px!important}.im-purchase-line .im-remove{grid-column:auto!important;grid-row:auto!important}.im-purchase-line select,.im-purchase-line input{padding:7px 4px!important;font-size:11px!important}}

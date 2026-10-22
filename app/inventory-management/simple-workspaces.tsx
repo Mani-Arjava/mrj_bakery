@@ -245,33 +245,26 @@ export function RecipesWorkspace() {
                 No items in stock. Purchase items first to add ingredients.
               </p>
             )}
-            <div className="im-table-scroll" style={{ marginBottom: '12px' }}>
-              <table>
-                <thead><tr><th>Raw material</th><th>Qty per 1 {selectedItem.productionUnit}</th><th></th></tr></thead>
-                <tbody>
-                  {ingredientDrafts.map((draft, idx) => (
-                    <tr key={idx}>
-                      <td>
-                        <select value={draft.itemId} onChange={e => updateDraft(idx, { itemId: e.target.value })}>
-                          <option value="">Select item…</option>
-                          {data.items.filter(it => it.quantity > 0).map(it => <option key={it.id} value={it.id}>{it.name} ({it.unit})</option>)}
-                        </select>
-                      </td>
-                      <td>
-                        <input type="number" min="0.001" step="0.001" value={draft.quantityPerUnit}
-                          onChange={e => updateDraft(idx, { quantityPerUnit: e.target.value })}
-                          placeholder="0" style={{ width: '100px' }} />
-                        {draft.itemId && <small style={{ marginLeft: '6px', color: 'var(--muted)' }}>{data.items.find(it => it.id === draft.itemId)?.unit}</small>}
-                      </td>
-                      <td>
-                        {ingredientDrafts.length > 1 && (
-                          <button type="button" className="im-remove" onClick={() => setIngredientDrafts(ingredientDrafts.filter((_, i) => i !== idx))}>×</button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="ingredient-rows" style={{ marginBottom: '12px' }}>
+              {ingredientDrafts.map((draft, idx) => {
+                const selectedUnit = draft.itemId ? data.items.find(it => it.id === draft.itemId)?.unit : '';
+                return (
+                  <div key={idx} className="ingredient-row">
+                    <select value={draft.itemId} onChange={e => updateDraft(idx, { itemId: e.target.value })}>
+                      <option value="">Select raw material…</option>
+                      {data.items.filter(it => it.quantity > 0).map(it => <option key={it.id} value={it.id}>{it.name} ({it.unit})</option>)}
+                    </select>
+                    <input type="number" min="0.001" step="0.001" value={draft.quantityPerUnit}
+                      onChange={e => updateDraft(idx, { quantityPerUnit: e.target.value })}
+                      placeholder="0" />
+                    <span className="ingredient-unit">{selectedUnit || '—'}</span>
+                    {ingredientDrafts.length > 1 && (
+                      <button type="button" className="ingredient-remove"
+                        onClick={() => setIngredientDrafts(ingredientDrafts.filter((_, i) => i !== idx))}>×</button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <button className="im-text-button" type="button" onClick={() => setIngredientDrafts([...ingredientDrafts, { itemId: '', quantityPerUnit: '' }])}>+ Add ingredient</button>
