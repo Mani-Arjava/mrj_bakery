@@ -457,17 +457,18 @@ export function ProductsWorkspace() {
         <h3>{editing ? 'Edit product' : 'New product'}</h3>
         <form onSubmit={handleSubmit}>
           <label>Product name<input required autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. 20-Piece Roll Cake" /></label>
-          <div style={{ marginBottom: '16px' }}>
-            <span style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>Unit conversion</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <select value={form.conversionUnit} onChange={(e) => setForm({ ...form, conversionUnit: e.target.value as 'KG' | 'Tray' })} style={{ width: 'auto' }}>
-                <option value="KG">KG</option>
-                <option value="Tray">Tray</option>
-              </select>
-              <span style={{ color: 'var(--muted)', fontSize: '13px', whiteSpace: 'nowrap' }}>1 {form.conversionUnit} =</span>
-              <input type="number" step="1" min="1" value={form.count} onChange={(e) => setForm({ ...form, count: e.target.value })} placeholder="e.g. 20" style={{ width: '80px' }} />
-              <span style={{ color: 'var(--muted)', fontSize: '13px' }}>pieces</span>
-            </div>
+          <div className="unit-conversion-wrap">
+            <label>Unit conversion
+              <div className="unit-conversion-row">
+                <select value={form.conversionUnit} onChange={(e) => setForm({ ...form, conversionUnit: e.target.value as 'KG' | 'Tray' })}>
+                  <option value="KG">KG</option>
+                  <option value="Tray">Tray</option>
+                </select>
+                <span className="unit-eq">1 {form.conversionUnit} =</span>
+                <input type="number" step="1" min="1" value={form.count} onChange={(e) => setForm({ ...form, count: e.target.value })} placeholder="e.g. 20" />
+                <span className="unit-eq">pieces</span>
+              </div>
+            </label>
             <small style={{ color: 'var(--muted)', display: 'block', marginTop: '4px' }}>Number of pieces in one packet</small>
           </div>
           <label>Retail price per packet (₹)<input required type="number" step="0.01" min="0" value={form.pricePerPacketPaise / 100} onChange={(e) => setForm({ ...form, pricePerPacketPaise: Math.round(Number(e.target.value) * 100) })} /></label>

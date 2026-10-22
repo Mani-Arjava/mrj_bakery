@@ -67,6 +67,12 @@ table th:nth-child(1){min-width:100px!important}
 .supplier-info-rows .im-status{display:block!important;background:none!important;border-radius:0!important;width:auto!important;height:auto!important;place-items:unset!important;font-size:12px!important;font-weight:600!important;padding:8px 0!important;text-align:right!important}
 /* Equalise action bar buttons in supplier detail view */
 .im-section-actions .standalone-delete{padding:12px 16px!important;font-size:12px!important;border-radius:7px!important}
+/* Product form: unit conversion row */
+.unit-conversion-wrap{display:block!important;flex-direction:unset!important;width:100%!important;margin-bottom:16px!important}
+.unit-conversion-row{display:grid!important;grid-template-columns:80px auto 1fr auto;align-items:center;gap:8px;margin-top:6px;width:100%}
+.unit-conversion-row select,.unit-conversion-row input{margin:0!important;width:100%!important;display:block!important}
+.unit-eq{font-size:13px;color:var(--muted);white-space:nowrap}
+@media(max-width:520px){.unit-conversion-row{grid-template-columns:70px auto 1fr auto;gap:6px}}
 /* Supplier + Item + Product card Edit/Delete buttons — full-width row */
 .supplier-card .row-actions,.item-card .row-actions,.product-card .row-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;margin-top:12px!important;padding-top:10px!important;border-top:1px solid var(--line)!important;width:100%!important}
 .supplier-card .row-actions button,.item-card .row-actions button,.product-card .row-actions button{padding:10px 0!important;font-size:12px!important;border-radius:6px!important;text-align:center!important;width:100%!important}
