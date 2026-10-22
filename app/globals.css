@@ -38,3 +38,46 @@
 .im-app .im-selected-party{display:grid;gap:16px;background:#fff;border:1px solid #dfe4da;border-radius:14px;padding:22px}.im-app .im-selected-party-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}.im-app .im-selected-party-head h2{font:700 32px/1 'Playfair Display';margin:0 0 7px}.im-app .im-selected-party-head span{font-size:12px;color:#718078}.im-app .im-party-summary{display:flex;align-items:center;gap:22px;padding-top:16px;border-top:1px solid #edf0eb;font-size:12px;color:#718078}.im-app .im-party-summary b{font-size:20px;color:#143d32}.im-app .im-party-summary button{margin-left:auto;background:#143d32;color:#fff;border:0;border-radius:7px;font-weight:700}.im-app .im-secondary{background:#e7eee4;color:#143d32}@media(max-width:520px){.im-app .im-selected-party-head{flex-direction:column}.im-app .im-party-summary{align-items:flex-start;flex-direction:column}.im-app .im-party-summary button{margin-left:0}}
 .im-app .im-party-card em{font-style:normal;color:#718078;font-size:11px;margin-top:6px}.im-app .im-party-card strong{color:#bc6944;font-size:12px}.im-app .im-party-summary{flex-wrap:wrap}.im-app .im-party-summary button{white-space:nowrap}
 .im-app .im-bill-card footer{display:flex!important;position:static!important;inset:auto!important;grid-column:auto!important;background:transparent!important;color:#718078!important;padding:12px 0 0!important;border:0!important;box-shadow:none!important;min-height:0!important;align-items:center;justify-content:space-between;gap:16px}.im-app .im-bill-card footer span{font-size:12px;color:#718078}.im-app .im-bill-card footer strong{font-size:16px;color:#1f2925}.im-app .im-bill-card footer strong b{color:#bc6944}
+
+/* ── Design Overhaul — Real Website Feel ────────────────────────── */
+
+/* Warm shadow depth tokens (replaces flat box-shadows throughout) */
+:root{--shadow-sm:0 2px 8px rgba(33,17,9,.09),0 1px 2px rgba(33,17,9,.05);--shadow-md:0 8px 24px rgba(33,17,9,.13),0 2px 6px rgba(33,17,9,.06);--shadow-lg:0 20px 50px rgba(33,17,9,.17),0 6px 14px rgba(33,17,9,.08)}
+
+/* Subtle paper texture — signals craft quality */
+body:not(.im-app *):before,body:before{content:'';position:fixed;inset:0;z-index:9998;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");opacity:.022;mix-blend-mode:multiply}
+
+/* Editorial hero headline — tight tracking feels premium */
+.hero-title{letter-spacing:-.055em!important;line-height:.93!important;font-weight:800!important}
+
+/* 3-column cascade product grid — breaks the predictable uniform grid */
+.product-grid{grid-template-columns:repeat(3,1fr)!important;gap:26px 20px!important}
+.product-card:nth-child(2n){margin-top:0!important}
+.product-card:nth-child(3n+2){margin-top:48px!important}
+
+/* Human hover — slight tilt instead of robotic equal lift */
+.product-card:hover{transform:translateY(-5px) rotate(-.4deg)!important;box-shadow:var(--shadow-lg)!important}
+.product-card{box-shadow:var(--shadow-sm)!important;border-radius:3px!important}
+.moment-cards article:hover{transform:translateY(-5px) rotate(.3deg)!important}
+
+/* Editorial stats — bolder display numerals */
+.stats strong{font-size:clamp(44px,5.5vw,72px)!important;letter-spacing:-.045em!important;display:block!important}
+.stats span{letter-spacing:.14em!important}
+
+/* Refined contact form radius */
+.contact form{border-radius:1px!important}
+
+/* Audience pills — remove over-rounded, feel more editorial */
+.audience-pills span{border-radius:2px!important}
+
+/* Restore 2-col on tablet, single-col on mobile */
+@media(max-width:800px){
+  .product-grid{grid-template-columns:repeat(2,1fr)!important;gap:18px 14px!important}
+  .product-card:nth-child(3n+2){margin-top:0!important}
+  .product-card:nth-child(2n){margin-top:28px!important}
+}
+@media(max-width:560px){
+  .product-grid{grid-template-columns:1fr!important}
+  .product-card:nth-child(2n){margin-top:0!important}
+  .product-card:nth-child(3n+2){margin-top:0!important}
+}
