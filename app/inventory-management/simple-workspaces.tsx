@@ -686,7 +686,7 @@ export function ProductionWorkspace() {
           )}
 
           {recipeSummary.length > 0 && (
-            <div style={{ background: '#f5f5f0', borderRadius: '6px', padding: '10px 14px', marginBottom: '12px' }}>
+            <div style={{ background: '#f5f5f0', borderRadius: '6px', padding: '10px 14px', marginBottom: '12px', display: 'block' }}>
               <small style={{ fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: '6px' }}>
                 RAW MATERIALS TO BE DEDUCTED
               </small>
