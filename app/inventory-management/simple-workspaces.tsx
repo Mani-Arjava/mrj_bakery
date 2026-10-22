@@ -43,7 +43,7 @@ function Empty({ title, text, action, onAction }: { title: string; text: string;
 
 type SupplierFormValue = { name: string; address: string; contactPerson: string; phone: string; openingPendingPaise: string; openingAdvancePaise: string };
 function SupplierForm({ form, setForm, submit, close, editing }: { form: SupplierFormValue; setForm: (value: SupplierFormValue) => void; submit: (event: FormEvent) => void; close: () => void; editing: boolean }) {
-  return <div className="im-modal-backdrop"><div className="im-modal"><button className="im-modal-close" onClick={close}>×</button><h2>{editing ? 'Edit supplier' : 'Add supplier'}</h2><form className="im-modal-form" onSubmit={submit}><label>Shop / supplier name<input autoFocus required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Shop A" /></label><label>Contact person<input value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} /></label><label>Contact number<input inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label><label>Address<textarea rows={3} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></label>{!editing && <><p className="im-muted">Opening balance — fill only if you already have a balance with this supplier before recording purchases here.</p><label>To be Pay(₹)<input type="number" min="0" step="0.01" value={form.openingPendingPaise} onChange={(e) => setForm({ ...form, openingPendingPaise: e.target.value })} placeholder="0" /></label><label>To be Receive (₹)<input type="number" min="0" step="0.01" value={form.openingAdvancePaise} onChange={(e) => setForm({ ...form, openingAdvancePaise: e.target.value })} placeholder="0" /></label></>}<button className="im-primary" type="submit">{editing ? 'Save changes' : 'Create supplier'}</button></form></div></div>;
+  return <div className="im-modal-backdrop"><div className="im-modal"><button className="im-modal-close" onClick={close}>×</button><h2>{editing ? 'Edit supplier' : 'Add supplier'}</h2><form className="im-modal-form" onSubmit={submit}><label>Shop / supplier name<input autoFocus required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Shop A" /></label><label>Contact person<input value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} /></label><label>Contact number<input inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label><label>Address<textarea rows={3} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></label>{!editing && <><p className="im-muted">Opening balance — fill only if you already have a balance with this supplier before recording purchases here.</p><label>To be Pay (₹)<input type="number" min="0" step="0.01" value={form.openingPendingPaise} onChange={(e) => setForm({ ...form, openingPendingPaise: e.target.value })} placeholder="0" /></label><label>To be Receive (₹)<input type="number" min="0" step="0.01" value={form.openingAdvancePaise} onChange={(e) => setForm({ ...form, openingAdvancePaise: e.target.value })} placeholder="0" /></label></>}<button className="im-primary" type="submit">{editing ? 'Save changes' : 'Create supplier'}</button></form></div></div>;
 }
 
 function SupplierActions({ edit, remove }: { edit: () => void; remove: () => void }) {
@@ -407,6 +407,7 @@ export function RecipesWorkspace() {
 
 export function ProductsWorkspace() {
   const { data, run, notice, error } = useSimpleInventory();
+  const [mode, setMode] = useState<Mode>('cards');
   const [editing, setEditing] = useState<storage.Product | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', count: '', conversionUnit: 'KG' as 'KG' | 'Tray', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' });
@@ -448,7 +449,7 @@ export function ProductsWorkspace() {
     <Feedback notice={notice} error={error} />
     <div className="im-section-actions">
       <div><p className="im-kicker">PRODUCTS</p><h2 className="im-page-title">Manage products & pricing</h2></div>
-      <button className="im-primary" onClick={() => { setEditing(null); setForm({ name: '', count: '', conversionUnit: 'KG', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' }); setShowForm(true); }}>+ Add product</button>
+      <div className="action-group"><ViewToggle mode={mode} setMode={setMode} /><button className="im-primary" onClick={() => { setEditing(null); setForm({ name: '', count: '', conversionUnit: 'KG', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' }); setShowForm(true); }}>+ Add product</button></div>
     </div>
 
     {showForm && (
@@ -492,7 +493,7 @@ export function ProductsWorkspace() {
       <div className="im-panel-title"><h2>Products</h2><span>{data.products.length} total</span></div>
       {data.products.length === 0 ? (
         <Empty title="No products yet" text="Add your first finished good to start tracking production and sales." />
-      ) : (
+      ) : mode === 'table' ? (
         <div className="im-table-scroll">
           <table>
             <thead>
@@ -514,6 +515,26 @@ export function ProductsWorkspace() {
               })}
             </tbody>
           </table>
+        </div>
+      ) : (
+        <div className="im-party-grid">
+          {data.products.map((product) => {
+            const prodItem = product.productionItemId ? data.productionItems.find(pi => pi.id === product.productionItemId) : undefined;
+            return (
+              <article className="im-party-card product-card" key={product.id}>
+                <div className="supplier-info-rows">
+                  <span className="supplier-row-label">Product</span>
+                  <span className="supplier-row-value">{product.name}</span>
+                  <span className="supplier-row-label">Retail</span>
+                  <span className="supplier-row-value">{money(product.pricePerPacketPaise)}</span>
+                  {product.wholesalePricePerPacketPaise != null && <><span className="supplier-row-label">Wholesale</span><span className="supplier-row-value">{money(product.wholesalePricePerPacketPaise)}</span></>}
+                  {product.count && <><span className="supplier-row-label">Conversion</span><span className="supplier-row-value">1 {product.conversionUnit ?? 'KG'} = {product.count} pcs</span></>}
+                  {prodItem && <><span className="supplier-row-label">Linked</span><span className="supplier-row-value">{prodItem.name}</span></>}
+                </div>
+                <div className="row-actions"><button className="action-edit" onClick={() => editProduct(product)}>Edit</button><button className="action-delete" onClick={() => removeProduct(product)}>Delete</button></div>
+              </article>
+            );
+          })}
         </div>
       )}
     </section>
