@@ -5,7 +5,7 @@ import * as storage from '@/lib/inventory/storage';
 import './simple.css';
 import './simple-actions.css';
 
-const UNITS = ['Kg', 'Gram', 'Liter', 'Piece', 'Packet', 'Box', 'Bag', 'Bottle'];
+const UNITS = ['Kg', 'Gm', 'Lt', 'Pc', 'Pkt', 'Box', 'Bag', 'Btl'];
 const today = () => new Date().toISOString().slice(0, 10);
 const money = (paise: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(paise / 100);
 type Mode = 'cards' | 'table';
