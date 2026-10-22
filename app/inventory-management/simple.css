@@ -67,9 +67,11 @@ table th:nth-child(1){min-width:100px!important}
 .supplier-info-rows .im-status{display:block!important;background:none!important;border-radius:0!important;width:auto!important;height:auto!important;place-items:unset!important;font-size:12px!important;font-weight:600!important;padding:8px 0!important;text-align:right!important}
 /* Equalise action bar buttons in supplier detail view */
 .im-section-actions .standalone-delete{padding:12px 16px!important;font-size:12px!important;border-radius:7px!important}
-/* Supplier card Edit/Delete buttons — full-width row, same height as info rows */
-.supplier-card .row-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;margin-top:12px!important;padding-top:10px!important;border-top:1px solid var(--line)!important;width:100%!important}
-.supplier-card .row-actions button{padding:10px 0!important;font-size:12px!important;border-radius:6px!important;text-align:center!important;width:100%!important}
+/* Supplier + Item card Edit/Delete buttons — full-width row */
+.supplier-card .row-actions,.item-card .row-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;margin-top:12px!important;padding-top:10px!important;border-top:1px solid var(--line)!important;width:100%!important}
+.supplier-card .row-actions button,.item-card .row-actions button{padding:10px 0!important;font-size:12px!important;border-radius:6px!important;text-align:center!important;width:100%!important}
+/* Item card: same cream label-value style as supplier card */
+.im-party-card.item-card{background:#f7f4f0!important;padding:14px 16px!important;min-height:unset!important;flex-direction:column!important;align-items:stretch!important}
 /* Purchase history card footer — fix global footer dark-bg bleed, 2×2 grid */
 .purchase-history-card footer{background:transparent!important;color:var(--muted)!important;display:grid!important;grid-template-columns:auto 1fr!important;column-gap:10px!important;row-gap:5px!important;padding:10px 0 0!important;border-top:1px solid var(--line)!important;align-items:center!important;font-size:12px!important}
 .purchase-history-card footer span:nth-child(even){text-align:right!important;font-weight:600!important;color:var(--ink)!important}
