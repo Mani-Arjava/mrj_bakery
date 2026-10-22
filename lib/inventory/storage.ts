@@ -1,6 +1,16 @@
 const STORAGE_KEY = 'bakery_inventory_v2';
 const STORAGE_KEY_V1 = 'bakery_inventory_v1';
 
+const UNIT_NORMALIZE: Record<string, string> = {
+  Liter: 'Lt', Litre: 'Lt', Liters: 'Lt', Litres: 'Lt', liter: 'Lt', litre: 'Lt',
+  Gram: 'Gm', Grams: 'Gm', gram: 'Gm', grams: 'Gm',
+  Kilogram: 'Kg', Kilograms: 'Kg', Kilo: 'Kg', kilo: 'Kg', kilogram: 'Kg',
+  Piece: 'Pc', Pieces: 'Pc', piece: 'Pc', pieces: 'Pc',
+  Packet: 'Pkt', Packets: 'Pkt', packet: 'Pkt', packets: 'Pkt',
+  Bottle: 'Btl', Bottles: 'Btl', bottle: 'Btl', bottles: 'Btl',
+};
+function nu(unit: string): string { return UNIT_NORMALIZE[unit] ?? unit; }
+
 export type Supplier = { id: string; name: string; address: string; contactPerson: string; phone: string };
 export type InventoryItem = { id: string; name: string; unit: string; quantity: number };
 export type PurchaseLine = { itemId: string; itemName: string; quantity: number; unit: string; unitPricePaise: number; totalPaise: number };
@@ -40,8 +50,8 @@ function id() { return `${Date.now().toString(36)}-${Math.random().toString(36).
 function migrateV1toV2(v1: any): InventoryData {
   const data = emptyData();
   data.suppliers = Array.isArray(v1.suppliers) ? v1.suppliers : [];
-  data.items = Array.isArray(v1.items) ? v1.items : [];
-  data.purchases = Array.isArray(v1.purchases) ? v1.purchases : [];
+  data.items = Array.isArray(v1.items) ? v1.items.map((it: any) => ({ ...it, unit: nu(it.unit) })) : [];
+  data.purchases = Array.isArray(v1.purchases) ? v1.purchases.map((p: any) => ({ ...p, lines: Array.isArray(p.lines) ? p.lines.map((l: any) => ({ ...l, unit: nu(l.unit) })) : [] })) : [];
   data.customers = Array.isArray(v1.customers) ? v1.customers.map((c: any) => ({ ...c, type: c.type ?? 'retailer' })) : [];
   data.saleInvoices = Array.isArray(v1.saleInvoices) ? v1.saleInvoices : [];
 
@@ -103,8 +113,8 @@ export function getData(): InventoryData {
     const parsed = JSON.parse(raw);
     return {
       suppliers: Array.isArray(parsed.suppliers) ? parsed.suppliers : [],
-      items: Array.isArray(parsed.items) ? parsed.items : [],
-      purchases: Array.isArray(parsed.purchases) ? parsed.purchases : [],
+      items: Array.isArray(parsed.items) ? parsed.items.map((it: any) => ({ ...it, unit: nu(it.unit) })) : [],
+      purchases: Array.isArray(parsed.purchases) ? parsed.purchases.map((p: any) => ({ ...p, lines: Array.isArray(p.lines) ? p.lines.map((l: any) => ({ ...l, unit: nu(l.unit) })) : [] })) : [],
       products: Array.isArray(parsed.products) ? parsed.products : [],
       productionItems: Array.isArray(parsed.productionItems) ? parsed.productionItems : [],
       recipes: Array.isArray(parsed.recipes) ? parsed.recipes : [],
