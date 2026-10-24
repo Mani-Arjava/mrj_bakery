@@ -83,3 +83,20 @@ table th:nth-child(1){min-width:100px!important}
 .purchase-history-card footer span:nth-child(even){text-align:right!important;font-weight:600!important;color:var(--ink)!important}
 /* Purchase line: 6-column single-row on mobile + column heading */
 @media(max-width:520px){.im-purchase-lines{overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}.im-line-head{display:grid!important;min-width:420px!important;grid-template-columns:90px 50px 50px 58px 1fr 26px!important;gap:6px!important;padding:4px 0 6px!important;border-bottom:1px solid #ddd8d0!important}.im-line-head span{font-size:9px!important;font-weight:700!important;color:#b0a090!important;text-transform:uppercase!important;letter-spacing:.05em!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}.im-purchase-line{min-width:420px!important;grid-template-columns:90px 50px 50px 58px 1fr 26px!important;padding:8px 0!important;background:transparent!important;border-radius:0!important;border:none!important;border-bottom:1px solid #f3ede6!important;margin-bottom:0!important;gap:6px!important}.im-purchase-line>select:first-child{grid-column:auto!important}.im-purchase-line b{grid-column:auto!important;font-size:12px!important;padding:8px 4px!important;background:#f5f0eb!important;border:1px solid #dbe2d8!important;border-radius:4px!important;text-align:right!important;white-space:nowrap!important}.im-purchase-line .im-remove{grid-column:auto!important;grid-row:auto!important}.im-purchase-line select,.im-purchase-line input{padding:8px 4px!important;font-size:12px!important}.im-purchase-line>select:first-child{width:90px!important;max-width:90px!important}}
+/* Production draft rows (raw materials / products made form rows) */
+.production-draft-row{display:grid;grid-template-columns:1fr 90px 44px auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #f3ede6}
+.production-draft-row:last-of-type{border-bottom:none}
+.production-draft-row select,.production-draft-row input{display:block;width:100%;padding:9px 10px;border:1px solid #dbe2d8;border-radius:6px;font:13px 'DM Sans';background:#fcfdfb;color:var(--ink)}
+.production-draft-unit{font-size:11px;color:var(--muted);text-align:center}
+/* Production batch history cards */
+.im-party-card.production-batch-card{background:#f7f4f0!important;padding:14px 16px!important;min-height:unset!important;flex-direction:column!important;align-items:stretch!important}
+.production-batch-card .row-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;margin-top:12px!important;padding-top:10px!important;border-top:1px solid var(--line)!important;width:100%!important}
+.production-batch-card .row-actions button{padding:10px 0!important;font-size:12px!important;border-radius:6px!important;text-align:center!important;width:100%!important}
+@media(max-width:520px){.production-draft-row{grid-template-columns:1fr auto auto;row-gap:6px}.production-draft-row>select:first-child{grid-column:1/-1}}
+/* Daily production summary panel */
+.production-summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:4px}
+.production-summary-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;gap:8px}
+.production-summary-row:last-child{border-bottom:none}
+.production-summary-row span{color:var(--ink)}
+.production-summary-row b{color:var(--ink);white-space:nowrap}
+@media(max-width:520px){.production-summary-grid{grid-template-columns:1fr}}

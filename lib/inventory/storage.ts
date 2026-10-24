@@ -25,7 +25,16 @@ export type Recipe = { id: string; productionItemId: string; ingredients: Recipe
 // Finished goods / packaging variants sold to customers
 export type Product = { id: string; name: string; pricePerPacketPaise: number; wholesalePricePerPacketPaise?: number; createdAt: string; productionItemId?: string; count?: number; conversionUnit?: 'KG' | 'Tray' };
 
-export type ProductionBatch = { id: string; date: string; productionItemId: string; productionItemName: string; productionQuantity: number; productionUnit: 'KG' | 'Tray'; piecesProduced: number; notes?: string };
+export type ProductionBatchMaterial = { itemId: string; itemName: string; quantity: number; unit: string };
+export type ProductionBatchOutput = { productId: string; productName: string; quantity: number };
+export type ProductionBatch = {
+  id: string; date: string;
+  productionItemId?: string; productionItemName?: string;
+  productionQuantity?: number; productionUnit?: 'KG' | 'Tray'; piecesProduced?: number;
+  rawMaterials?: ProductionBatchMaterial[];
+  productsProduced?: ProductionBatchOutput[];
+  notes?: string;
+};
 export type Customer = { id: string; name: string; phone: string; type: 'wholesaler' | 'retailer'; outstandingPaise: number; advancePaise: number };
 export type SaleLine = { productId: string; productName: string; quantityPackets: number; pricePerPacketPaise: number; totalPaise: number };
 export type SaleInvoice = { id: string; date: string; customerId: string; customerName: string; lines: SaleLine[]; totalPaise: number; paidPaise: number; outstandingPaise: number };
@@ -341,13 +350,18 @@ function applyRecipeEffect(data: InventoryData, productionItemId: string, produc
   }
 }
 
+function applyMaterialEffect(data: InventoryData, materials: ProductionBatchMaterial[], direction: 1 | -1) {
+  for (const mat of materials) {
+    const item = data.items.find(it => it.id === mat.itemId);
+    if (item) item.quantity += mat.quantity * direction;
+  }
+}
+
 export function addProductionBatch(input: Omit<ProductionBatch, 'id'>) {
   const data = getData();
   const batch: ProductionBatch = { id: id(), ...input };
   data.productionBatches.push(batch);
-  applyRecipeEffect(data, input.productionItemId, input.productionQuantity, -1);
-  const movement: StockMovement = { id: id(), date: input.date, productionItemId: input.productionItemId, quantityPieces: input.piecesProduced, movementType: 'PRODUCTION', sourceId: batch.id };
-  data.stockMovements.push(movement);
+  if (input.rawMaterials?.length) applyMaterialEffect(data, input.rawMaterials, -1);
   save(data);
   return batch;
 }
@@ -364,14 +378,11 @@ export function updateProductionBatch(batchId: string, input: Omit<ProductionBat
   const data = getData();
   const batch = data.productionBatches.find(b => b.id === batchId);
   if (!batch) throw new Error('Production batch not found.');
-  // Reverse old effects
-  applyRecipeEffect(data, batch.productionItemId, batch.productionQuantity, 1);
+  if (batch.rawMaterials?.length) applyMaterialEffect(data, batch.rawMaterials, 1);
+  else applyRecipeEffect(data, batch.productionItemId ?? '', batch.productionQuantity ?? 0, 1);
   data.stockMovements = data.stockMovements.filter(m => m.sourceId !== batchId);
-  // Apply new effects
   Object.assign(batch, input);
-  applyRecipeEffect(data, input.productionItemId, input.productionQuantity, -1);
-  const movement: StockMovement = { id: id(), date: input.date, productionItemId: input.productionItemId, quantityPieces: input.piecesProduced, movementType: 'PRODUCTION', sourceId: batchId };
-  data.stockMovements.push(movement);
+  if (input.rawMaterials?.length) applyMaterialEffect(data, input.rawMaterials, -1);
   save(data);
 }
 
@@ -379,7 +390,8 @@ export function deleteProductionBatch(batchId: string) {
   const data = getData();
   const batch = data.productionBatches.find(b => b.id === batchId);
   if (!batch) throw new Error('Production batch not found.');
-  applyRecipeEffect(data, batch.productionItemId, batch.productionQuantity, 1);
+  if (batch.rawMaterials?.length) applyMaterialEffect(data, batch.rawMaterials, 1);
+  else applyRecipeEffect(data, batch.productionItemId ?? '', batch.productionQuantity ?? 0, 1);
   data.stockMovements = data.stockMovements.filter(m => m.sourceId !== batchId);
   data.productionBatches = data.productionBatches.filter(b => b.id !== batchId);
   save(data);
