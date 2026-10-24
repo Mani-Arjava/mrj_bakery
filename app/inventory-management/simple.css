@@ -100,3 +100,22 @@ table th:nth-child(1){min-width:100px!important}
 .production-summary-row span{color:var(--ink)}
 .production-summary-row b{color:var(--ink);white-space:nowrap}
 @media(max-width:520px){.production-summary-grid{grid-template-columns:1fr}}
+/* Production form — table layout (replaces production-draft-row) */
+.prod-table-wrap{margin-bottom:4px}
+.prod-table-head{display:grid;grid-template-columns:1fr 100px 60px 36px;gap:8px;padding:0 0 6px;border-bottom:1px solid #ddd8d0}
+.prod-table-head span{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.prod-table-row{display:grid;grid-template-columns:1fr 100px 60px 36px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #f3ede6}
+.prod-table-row:last-of-type{border-bottom:none}
+.prod-table-row select,.prod-table-row input{display:block!important;width:100%!important;padding:9px 10px!important;border:1px solid #dbe2d8!important;border-radius:6px!important;font:13px 'DM Sans'!important;background:#fcfdfb!important;color:var(--ink)!important;margin:0!important}
+.prod-unit-cell{font-size:12px;font-weight:600;color:var(--ink);text-align:center}
+.prod-over-stock-msg{color:#a43932;font-size:11px;margin:2px 0 4px;font-weight:600}
+@media(max-width:520px){.prod-table-head,.prod-table-row{grid-template-columns:1fr 80px 46px 32px;gap:6px}}
+/* Production line rows — matches purchase table visual style */
+.prod-line-head{display:grid;grid-template-columns:1fr 90px 60px 36px;gap:12px;align-items:center;padding:4px 8px 8px;border-bottom:1px solid #ddd8d0}
+.prod-line-head span{font-size:9px;font-weight:700;color:#b0a090;text-transform:uppercase;letter-spacing:.05em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prod-line{display:grid;grid-template-columns:1fr 90px 60px 36px;gap:12px;align-items:center;padding:10px 8px;border-bottom:1px solid var(--line)}
+.prod-line:last-of-type{border-bottom:none}
+.prod-line select,.prod-line input{display:block;width:100%;padding:8px;border:1px solid var(--line);border-radius:4px;font-size:13px;font-family:inherit;background:#fcfdfb;color:var(--ink);margin:0!important}
+.prod-line input[type="number"]{text-align:center}
+.prod-unit-label{font-size:12px;font-weight:600;color:var(--ink);text-align:center}
+@media(max-width:520px){.prod-line-head{display:none}.prod-line{grid-template-columns:1fr 80px 50px 32px;gap:8px;padding:8px 4px}}

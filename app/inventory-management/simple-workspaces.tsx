@@ -551,15 +551,23 @@ export function ProductionWorkspace() {
   const [notes, setNotes] = useState('');
   const [editingBatch, setEditingBatch] = useState<storage.ProductionBatch | null>(null);
   const [matDrafts, setMatDrafts] = useState<Array<{ itemId: string; quantity: string }>>([{ itemId: '', quantity: '' }]);
-  const [prodDrafts, setProdDrafts] = useState<Array<{ productId: string; quantity: string }>>([{ productId: '', quantity: '' }]);
+  const [prodDrafts, setProdDrafts] = useState<Array<{ productId: string; quantity: string; unit: string }>>([{ productId: '', quantity: '', unit: 'Pcs' }]);
   const [summaryDate, setSummaryDate] = useState(today());
+
+  function getProductUnit(productId: string): string {
+    const product = data.products.find(p => p.id === productId);
+    if (!product) return 'Pcs';
+    if (product.conversionUnit) return product.conversionUnit;
+    const pi = product.productionItemId ? data.productionItems.find(pi => pi.id === product.productionItemId) : undefined;
+    return pi?.productionUnit ?? 'Pcs';
+  }
 
   function resetForm() {
     setDate(today());
     setNotes('');
     setEditingBatch(null);
     setMatDrafts([{ itemId: '', quantity: '' }]);
-    setProdDrafts([{ productId: '', quantity: '' }]);
+    setProdDrafts([{ productId: '', quantity: '', unit: 'Pcs' }]);
   }
 
   function handleSubmit(e: FormEvent) {
@@ -592,7 +600,7 @@ export function ProductionWorkspace() {
       .filter(d => d.productId && Number(d.quantity) > 0)
       .map(d => {
         const product = data.products.find(p => p.id === d.productId)!;
-        return { productId: product.id, productName: product.name, quantity: Number(d.quantity) };
+        return { productId: product.id, productName: product.name, quantity: Number(d.quantity), unit: d.unit };
       });
     const batchData = { date, rawMaterials, productsProduced, notes: notes || undefined };
     run(() => {
@@ -613,8 +621,8 @@ export function ProductionWorkspace() {
     );
     setProdDrafts(
       batch.productsProduced?.length
-        ? batch.productsProduced.map(p => ({ productId: p.productId, quantity: String(p.quantity) }))
-        : [{ productId: '', quantity: '' }]
+        ? batch.productsProduced.map(p => ({ productId: p.productId, quantity: String(p.quantity), unit: p.unit ?? getProductUnit(p.productId) }))
+        : [{ productId: '', quantity: '', unit: 'Pcs' }]
     );
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -634,10 +642,10 @@ export function ProductionWorkspace() {
       matTotals[m.itemId].qty += m.quantity;
     }
   }
-  const prodTotals: Record<string, { name: string; qty: number }> = {};
+  const prodTotals: Record<string, { name: string; qty: number; unit: string }> = {};
   for (const batch of dayBatches) {
     for (const p of batch.productsProduced ?? []) {
-      if (!prodTotals[p.productId]) prodTotals[p.productId] = { name: p.productName, qty: 0 };
+      if (!prodTotals[p.productId]) prodTotals[p.productId] = { name: p.productName, qty: 0, unit: p.unit ?? 'Pcs' };
       prodTotals[p.productId].qty += p.quantity;
     }
   }
@@ -647,14 +655,19 @@ export function ProductionWorkspace() {
     <div className="im-section-actions"><div><p className="im-kicker">PRODUCTION</p><h2 className="im-page-title">Record daily production</h2></div></div>
 
     <section className="im-panel">
-      <h3 style={{ marginTop: 0 }}>{editingBatch ? 'Edit production record' : 'New production record'}</h3>
+      <div className="im-purchase-header" style={{ marginBottom: '16px' }}>
+        <div><h2 style={{ font: '700 22px/1 \'Playfair Display\'', margin: 0 }}>{editingBatch ? 'Edit production record' : 'New production record'}</h2>
+          <p className="im-muted" style={{ marginTop: '4px' }}>Record raw materials used and products made.</p>
+        </div>
+        <label style={{ margin: 0 }}>Date<input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+      </div>
       <form onSubmit={handleSubmit}>
-        <label>Date
-          <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
 
-        <div style={{ marginBottom: '16px' }}>
-          <p className="im-kicker" style={{ marginBottom: '8px' }}>RAW MATERIALS USED</p>
+        <p className="im-kicker" style={{ marginBottom: '6px' }}>Raw Materials Used</p>
+        <div className="im-purchase-lines">
+          <div className="prod-line-head">
+            <span>Item</span><span>Qty</span><span>Unit</span><span />
+          </div>
           {matDrafts.map((draft, idx) => {
             const selectedItem = draft.itemId ? data.items.find(it => it.id === draft.itemId) : undefined;
             const oldQty = editingBatch?.rawMaterials?.find(m => m.itemId === draft.itemId)?.quantity ?? 0;
@@ -663,49 +676,55 @@ export function ProductionWorkspace() {
             const overLimit = selectedItem && draft.quantity && enteredQty > available;
             return (
               <div key={idx}>
-                <div className="production-draft-row">
+                <div className="prod-line">
                   <select value={draft.itemId} onChange={e => setMatDrafts(matDrafts.map((d, i) => i === idx ? { ...d, itemId: e.target.value } : d))}>
                     <option value="">Select item…</option>
                     {data.items.map(it => <option key={it.id} value={it.id}>{it.name} (stock: {it.quantity} {it.unit})</option>)}
                   </select>
                   <input type="number" min="0.001" step="0.001" value={draft.quantity}
                     onChange={e => setMatDrafts(matDrafts.map((d, i) => i === idx ? { ...d, quantity: e.target.value } : d))}
-                    placeholder="Qty"
+                    placeholder="0"
                     style={overLimit ? { borderColor: '#a43932' } : undefined} />
-                  <span className="production-draft-unit">{selectedItem?.unit || '—'}</span>
-                  {matDrafts.length > 1 && (
-                    <button type="button" className="ingredient-remove" onClick={() => setMatDrafts(matDrafts.filter((_, i) => i !== idx))}>×</button>
-                  )}
+                  <span className="prod-unit-label">{selectedItem?.unit || '—'}</span>
+                  <button type="button" className="im-remove"
+                    onClick={() => matDrafts.length > 1 ? setMatDrafts(matDrafts.filter((_, i) => i !== idx)) : setMatDrafts([{ itemId: '', quantity: '' }])}>×</button>
                 </div>
                 {overLimit && (
-                  <p style={{ color: '#a43932', fontSize: '11px', margin: '2px 0 6px', fontWeight: 600 }}>
+                  <p className="prod-over-stock-msg" style={{ paddingLeft: '8px' }}>
                     Only {available.toLocaleString('en-IN', { maximumFractionDigits: 3 })} {selectedItem!.unit} in stock
                   </p>
                 )}
               </div>
             );
           })}
+        </div>
+        <div className="purchase-actions">
           <button type="button" className="im-text-button" onClick={() => setMatDrafts([...matDrafts, { itemId: '', quantity: '' }])}>+ Add material</button>
         </div>
 
-        <div style={{ marginBottom: '16px' }}>
-          <p className="im-kicker" style={{ marginBottom: '8px' }}>PRODUCTS MADE</p>
+        <p className="im-kicker" style={{ marginBottom: '6px', marginTop: '20px' }}>Products Made</p>
+        <div className="im-purchase-lines">
+          <div className="prod-line-head">
+            <span>Product</span><span>Qty</span><span>Unit</span><span />
+          </div>
           {prodDrafts.map((draft, idx) => (
-            <div key={idx} className="production-draft-row">
-              <select value={draft.productId} onChange={e => setProdDrafts(prodDrafts.map((d, i) => i === idx ? { ...d, productId: e.target.value } : d))}>
+            <div key={idx} className="prod-line">
+              <select value={draft.productId}
+                onChange={e => setProdDrafts(prodDrafts.map((d, i) => i === idx ? { productId: e.target.value, quantity: '', unit: getProductUnit(e.target.value) } : d))}>
                 <option value="">Select product…</option>
                 {data.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              <input type="number" min="1" step="1" value={draft.quantity}
+              <input type="number" min="0.001" step="0.001" value={draft.quantity}
                 onChange={e => setProdDrafts(prodDrafts.map((d, i) => i === idx ? { ...d, quantity: e.target.value } : d))}
-                placeholder="Qty (pcs)" />
-              <span className="production-draft-unit">pcs</span>
-              {prodDrafts.length > 1 && (
-                <button type="button" className="ingredient-remove" onClick={() => setProdDrafts(prodDrafts.filter((_, i) => i !== idx))}>×</button>
-              )}
+                placeholder="0" />
+              <span className="prod-unit-label">{draft.unit || '—'}</span>
+              <button type="button" className="im-remove"
+                onClick={() => prodDrafts.length > 1 ? setProdDrafts(prodDrafts.filter((_, i) => i !== idx)) : setProdDrafts([{ productId: '', quantity: '', unit: 'Pcs' }])}>×</button>
             </div>
           ))}
-          <button type="button" className="im-text-button" onClick={() => setProdDrafts([...prodDrafts, { productId: '', quantity: '' }])}>+ Add product</button>
+        </div>
+        <div className="purchase-actions">
+          <button type="button" className="im-text-button" onClick={() => setProdDrafts([...prodDrafts, { productId: '', quantity: '', unit: 'Pcs' }])}>+ Add product</button>
         </div>
 
         <label>Notes (optional)
@@ -743,7 +762,7 @@ export function ProductionWorkspace() {
             {Object.values(prodTotals).map((p, i) => (
               <div key={i} className="production-summary-row">
                 <span>{p.name}</span>
-                <b>{p.qty} pcs</b>
+                <b>{p.qty} {p.unit}</b>
               </div>
             ))}
             {Object.keys(prodTotals).length === 0 && <p className="im-muted" style={{ fontSize: '12px' }}>—</p>}
@@ -794,7 +813,7 @@ export function ProductionWorkspace() {
                   <p className="im-kicker" style={{ marginBottom: '4px' }}>Products Made</p>
                   {batch.productsProduced!.map((p, i) => (
                     <div key={i} style={{ fontSize: '12px', color: 'var(--ink)', padding: '2px 0' }}>
-                      {p.productName}: <b>{p.quantity} pcs</b>
+                      {p.productName}: <b>{p.quantity} {p.unit ?? 'Pcs'}</b>
                     </div>
                   ))}
                 </div>

@@ -26,7 +26,7 @@ export type Recipe = { id: string; productionItemId: string; ingredients: Recipe
 export type Product = { id: string; name: string; pricePerPacketPaise: number; wholesalePricePerPacketPaise?: number; createdAt: string; productionItemId?: string; count?: number; conversionUnit?: 'KG' | 'Tray' };
 
 export type ProductionBatchMaterial = { itemId: string; itemName: string; quantity: number; unit: string };
-export type ProductionBatchOutput = { productId: string; productName: string; quantity: number };
+export type ProductionBatchOutput = { productId: string; productName: string; quantity: number; unit: string };
 export type ProductionBatch = {
   id: string; date: string;
   productionItemId?: string; productionItemName?: string;
