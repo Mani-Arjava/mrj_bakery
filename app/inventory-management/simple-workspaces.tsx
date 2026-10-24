@@ -554,6 +554,12 @@ export function ProductsWorkspace() {
   </>;
 }
 
+function packetBreakdown(pieces: number, piecesPerPacket: number): string {
+  const pkts = Math.floor(pieces / piecesPerPacket);
+  const rem = pieces % piecesPerPacket;
+  return rem === 0 ? `${pkts} pkts` : `${pkts} pkts · ${rem} pcs`;
+}
+
 export function ProductionWorkspace() {
   const { data, run, notice, error } = useSimpleInventory();
   const [date, setDate] = useState(today());
@@ -779,10 +785,14 @@ export function ProductionWorkspace() {
             {Object.values(prodTotals).map((p, i) => {
               const product = data.products.find(pr => pr.id === p.productId);
               const pieces = product?.count ? Math.round(p.qty * product.count) : null;
+              const pkts = pieces != null && product?.piecesPerPacket ? packetBreakdown(pieces, product.piecesPerPacket) : null;
               return (
                 <div key={i} className="production-summary-row">
                   <span>{p.name}</span>
-                  <b>{p.qty.toLocaleString('en-IN', { maximumFractionDigits: 3 })} {p.unit}{pieces != null ? ` · ${pieces.toLocaleString('en-IN')} pcs` : ''}</b>
+                  <div style={{ textAlign: 'right' }}>
+                    <b>{p.qty.toLocaleString('en-IN', { maximumFractionDigits: 3 })} {p.unit}{pieces != null ? ` · ${pieces.toLocaleString('en-IN')} pcs` : ''}</b>
+                    {pkts && <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>{pkts}</div>}
+                  </div>
                 </div>
               );
             })}
@@ -801,10 +811,14 @@ export function ProductionWorkspace() {
         {Object.values(allProdStock).map((p, i) => {
           const product = data.products.find(pr => pr.id === p.productId);
           const pieces = product?.count ? Math.round(p.qty * product.count) : null;
+          const pkts = pieces != null && product?.piecesPerPacket ? packetBreakdown(pieces, product.piecesPerPacket) : null;
           return (
             <div key={i} className="production-summary-row">
               <span>{p.name}</span>
-              <b>{pieces != null ? `${pieces.toLocaleString('en-IN')} pcs` : `${p.qty} ${p.unit}`}</b>
+              <div style={{ textAlign: 'right' }}>
+                <b>{pieces != null ? `${pieces.toLocaleString('en-IN')} pcs` : `${p.qty} ${p.unit}`}</b>
+                {pkts && <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>{pkts}</div>}
+              </div>
             </div>
           );
         })}
