@@ -17,7 +17,7 @@ export type PurchaseLine = { itemId: string; itemName: string; quantity: number;
 export type Purchase = { id: string; date: string; supplierId: string; supplierName: string; lines: PurchaseLine[]; totalPaise: number; paidPaise: number };
 
 // Underlying bakery items that get produced (Roll Cake, ₹5 Bun, etc.)
-export type ProductionItem = { id: string; name: string; productionUnit: 'KG' | 'Tray'; piecesPerUnit: number };
+export type ProductionItem = { id: string; name: string; productionUnit?: 'KG' | 'Tray'; piecesPerUnit: number };
 
 export type RecipeIngredient = { itemId: string; itemName: string; quantityPerUnit: number; unit: string };
 export type Recipe = { id: string; productionItemId: string; ingredients: RecipeIngredient[] };

@@ -160,7 +160,7 @@ function _RecipesWorkspaceOld() {
 
   function openEditItem(item: storage.ProductionItem) {
     setEditingItem(item);
-    setItemForm({ name: item.name, productionUnit: item.productionUnit, piecesPerUnit: String(item.piecesPerUnit) });
+    setItemForm({ name: item.name, productionUnit: item.productionUnit ?? 'KG', piecesPerUnit: String(item.piecesPerUnit) });
     setShowItemForm(true);
   }
 
@@ -564,24 +564,24 @@ export function ProductionWorkspace() {
   const [summaryDate, setSummaryDate] = useState(today());
   const [showItemForm, setShowItemForm] = useState(false);
   const [editingItem, setEditingItem] = useState<storage.ProductionItem | null>(null);
-  const [itemForm, setItemForm] = useState({ name: '', productionUnit: 'KG' as 'KG' | 'Tray' });
+  const [itemForm, setItemForm] = useState({ name: '' });
 
   function submitItem(e: FormEvent) {
     e.preventDefault();
     if (!itemForm.name.trim()) return;
-    const payload = { name: itemForm.name.trim(), productionUnit: itemForm.productionUnit, piecesPerUnit: 1 };
+    const payload = { name: itemForm.name.trim(), piecesPerUnit: 1 };
     run(() => {
       if (editingItem) storage.updateProductionItem(editingItem.id, payload);
       else storage.addProductionItem(payload);
     });
     setShowItemForm(false);
     setEditingItem(null);
-    setItemForm({ name: '', productionUnit: 'KG' });
+    setItemForm({ name: '' });
   }
 
   function editItem(item: storage.ProductionItem) {
     setEditingItem(item);
-    setItemForm({ name: item.name, productionUnit: item.productionUnit });
+    setItemForm({ name: item.name });
     setShowItemForm(true);
   }
 
@@ -692,18 +692,12 @@ export function ProductionWorkspace() {
     <section className="im-panel">
       <div className="im-panel-title">
         <h2>Production Items</h2>
-        <button className="im-primary" onClick={() => { setEditingItem(null); setItemForm({ name: '', productionUnit: 'KG' }); setShowItemForm(true); }}>+ Add item</button>
+        <button className="im-primary" onClick={() => { setEditingItem(null); setItemForm({ name: '' }); setShowItemForm(true); }}>+ Add item</button>
       </div>
       {showItemForm && (
         <form onSubmit={submitItem} style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', marginBottom: '16px', flexWrap: 'wrap' }}>
           <label style={{ flex: 1, minWidth: '160px', margin: 0 }}>Name
             <input required autoFocus value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e.target.value })} placeholder="e.g. Roll Cake" />
-          </label>
-          <label style={{ margin: 0 }}>Unit
-            <select value={itemForm.productionUnit} onChange={e => setItemForm({ ...itemForm, productionUnit: e.target.value as 'KG' | 'Tray' })}>
-              <option value="KG">KG</option>
-              <option value="Tray">Tray</option>
-            </select>
           </label>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button type="button" className="im-secondary" onClick={() => { setShowItemForm(false); setEditingItem(null); }}>Cancel</button>
@@ -721,7 +715,7 @@ export function ProductionWorkspace() {
               <div key={item.id} className="production-summary-row" style={{ alignItems: 'flex-start' }}>
                 <div>
                   <b style={{ fontSize: '13px' }}>{item.name}</b>
-                  <span style={{ fontSize: '11px', color: 'var(--muted)', marginLeft: '8px' }}>{item.productionUnit}</span>
+                  <span style={{ fontSize: '11px', color: 'var(--muted)', marginLeft: '8px' }}>{data.products.find(p => p.productionItemId === item.id)?.conversionUnit ?? '—'}</span>
                   {linkedProducts.length > 0 && (
                     <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '3px' }}>→ {linkedProducts.map(p => p.name).join(', ')}</div>
                   )}
