@@ -924,26 +924,114 @@ export function ProductionWorkspace() {
   </>;
 }
 
+type CustomerFormValue = { name: string; phone: string; type: 'wholesaler' | 'retailer'; previousBalance: string; previousAdvance: string };
+function CustomerForm({ form, setForm, submit, close, editing }: { form: CustomerFormValue; setForm: (v: CustomerFormValue) => void; submit: (e: FormEvent) => void; close: () => void; editing: boolean }) {
+  return <div className="im-modal-backdrop"><div className="im-modal"><button className="im-modal-close" onClick={close}>×</button><h2>{editing ? 'Edit customer' : 'Add customer'}</h2><form className="im-modal-form" onSubmit={submit}><label>Name<input required autoFocus value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></label><label>Phone<input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></label><label>Customer type<select value={form.type} onChange={e => setForm({ ...form, type: e.target.value as 'wholesaler' | 'retailer' })}><option value="retailer">Retailer</option><option value="wholesaler">Wholesaler</option></select></label>{!editing && <><label>Previous balance (₹) <span style={{ fontWeight: 400, color: 'var(--muted)' }}>optional — opening dues</span><input type="number" min="0" step="0.01" value={form.previousBalance} onChange={e => setForm({ ...form, previousBalance: e.target.value })} placeholder="0" /></label><label>Opening advance (₹) <span style={{ fontWeight: 400, color: 'var(--muted)' }}>optional — prepaid credit</span><input type="number" min="0" step="0.01" value={form.previousAdvance} onChange={e => setForm({ ...form, previousAdvance: e.target.value })} placeholder="0" /></label></>}<button className="im-primary" type="submit">{editing ? 'Save changes' : 'Add customer'}</button></form></div></div>;
+}
+
+function CustomerBalance({ c }: { c: storage.Customer }) {
+  if (c.outstandingPaise > 0) return <span style={{ color: '#a43932' }}>{money(c.outstandingPaise)} due</span>;
+  if (c.advancePaise > 0) return <span style={{ color: '#2e7d32' }}>{money(c.advancePaise)} adv</span>;
+  return <span style={{ color: '#666' }}>—</span>;
+}
+
 export function CustomersWorkspace() {
-  const { data, run, refresh, notice, error } = useSimpleInventory();
+  const { data, run, notice, error } = useSimpleInventory();
+  const [mode, setMode] = useState<Mode>('cards');
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '', type: 'retailer' as 'wholesaler' | 'retailer', previousBalance: '', previousAdvance: '' });
+  const [editing, setEditing] = useState<storage.Customer | null>(null);
+  const [form, setForm] = useState<CustomerFormValue>({ name: '', phone: '', type: 'retailer', previousBalance: '', previousAdvance: '' });
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  function handleSubmit(e: FormEvent) {
+  const blankForm = (): CustomerFormValue => ({ name: '', phone: '', type: 'retailer', previousBalance: '', previousAdvance: '' });
+
+  function openCreate() { setEditing(null); setForm(blankForm()); setShowForm(true); }
+  function openEdit(c: storage.Customer) { setEditing(c); setForm({ name: c.name, phone: c.phone, type: c.type, previousBalance: '', previousAdvance: '' }); setShowForm(true); }
+  function remove(c: storage.Customer) { if (window.confirm(`Delete "${c.name}"?`)) run(() => storage.deleteCustomer(c.id)); }
+
+  function submit(e: FormEvent) {
     e.preventDefault();
     if (!form.name) return;
-    const previousBalancePaise = form.previousBalance !== '' ? Math.round(Number(form.previousBalance) * 100) : undefined;
-    const previousAdvancePaise = form.previousAdvance !== '' ? Math.round(Number(form.previousAdvance) * 100) : undefined;
-    run(() => storage.addCustomer({ name: form.name, phone: form.phone, type: form.type, previousBalancePaise, previousAdvancePaise }));
-    setForm({ name: '', phone: '', type: 'retailer', previousBalance: '', previousAdvance: '' });
-    setShowForm(false);
+    run(() => {
+      if (editing) {
+        storage.updateCustomer(editing.id, { name: form.name, phone: form.phone, type: form.type });
+      } else {
+        const previousBalancePaise = form.previousBalance !== '' ? Math.round(Number(form.previousBalance) * 100) : undefined;
+        const previousAdvancePaise = form.previousAdvance !== '' ? Math.round(Number(form.previousAdvance) * 100) : undefined;
+        storage.addCustomer({ name: form.name, phone: form.phone, type: form.type, previousBalancePaise, previousAdvancePaise });
+      }
+    });
+    setEditing(null); setShowForm(false);
   }
 
   const selected = selectedId ? data.customers.find(c => c.id === selectedId) : null;
-  const salesHistory = selected ? storage.getSalesHistory(selected.id) : [];
 
-  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">CUSTOMERS</p><h2 className="im-page-title">Customer accounts</h2></div><button className="im-primary" onClick={() => { setForm({ name: '', phone: '', type: 'retailer', previousBalance: '', previousAdvance: '' }); setShowForm(true); }}>+ Add customer</button></div>{showForm && <section className="im-panel"><h3>New customer</h3><form onSubmit={handleSubmit}><label>Name<input required autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label>Phone<input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label><label>Customer type<select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as 'wholesaler' | 'retailer' })}><option value="retailer">Retailer</option><option value="wholesaler">Wholesaler</option></select></label><label>Previous balance (₹) <span style={{ fontWeight: 400, color: 'var(--muted)' }}>optional — enter any opening dues</span><input type="number" min="0" step="0.01" value={form.previousBalance} onChange={(e) => setForm({ ...form, previousBalance: e.target.value })} placeholder="0" /></label><label>Opening advance (₹) <span style={{ fontWeight: 400, color: 'var(--muted)' }}>optional — prepaid credit</span><input type="number" min="0" step="0.01" value={form.previousAdvance} onChange={(e) => setForm({ ...form, previousAdvance: e.target.value })} placeholder="0" /></label><div style={{ display: 'flex', gap: '8px' }}><button type="button" className="im-secondary" onClick={() => setShowForm(false)}>Cancel</button><button type="submit" className="im-primary">Save</button></div></form></section>}{selected ? <section className="im-panel"><div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}><h2 style={{ margin: 0 }}>{selected.name}</h2><span className={`im-status ${selected.type === 'wholesaler' ? 'credit' : 'settled'}`} style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{selected.type}</span></div><p style={{ color: 'var(--muted)' }}>{selected.phone || 'No phone'}</p><div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}><div style={{ flex: 1, padding: '12px', background: selected.outstandingPaise > 0 ? '#fee7e5' : '#e8f5e9', borderRadius: '4px' }}><small>Outstanding</small><div style={{ fontSize: '20px', fontWeight: 600, color: selected.outstandingPaise > 0 ? '#a43932' : '#2e7d32' }}>{money(selected.outstandingPaise)}</div></div><div style={{ flex: 1, padding: '12px', background: selected.advancePaise > 0 ? '#e3f2fd' : '#f5f5f5', borderRadius: '4px' }}><small>Advance</small><div style={{ fontSize: '20px', fontWeight: 600, color: selected.advancePaise > 0 ? '#0d47a1' : '#666' }}>{money(selected.advancePaise)}</div></div></div><button className="im-secondary" onClick={() => setSelectedId(null)}>← Back to list</button></section> : <section className="im-panel"><div className="im-panel-title"><h2>Customers</h2><span>{data.customers.length} total</span></div>{data.customers.length === 0 ? <Empty title="No customers yet" text="Add customers to track their purchase history and balance." /> : <div className="im-table-scroll"><table><thead><tr><th>Name</th><th>Type</th><th>Phone</th><th>Balance</th></tr></thead><tbody>{data.customers.map((customer) => <tr key={customer.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedId(customer.id)}><td><b>{customer.name}</b></td><td><span className={`im-status ${customer.type === 'wholesaler' ? 'credit' : 'settled'}`}>{customer.type === 'wholesaler' ? 'Wholesaler' : 'Retailer'}</span></td><td>{customer.phone || '—'}</td><td>{customer.outstandingPaise > 0 ? <span style={{ color: '#a43932' }}>{money(customer.outstandingPaise)} due</span> : customer.advancePaise > 0 ? <span style={{ color: '#2e7d32' }}>{money(customer.advancePaise)} adv</span> : <span style={{ color: '#666' }}>—</span>}</td></tr>)}</tbody></table></div>}</section>}</>;
+  return <>
+    <Feedback notice={notice} error={error} />
+    <div className="im-section-actions">
+      <div><p className="im-kicker">CUSTOMERS</p><h2 className="im-page-title">Customer accounts</h2></div>
+      <div className="action-group"><ViewToggle mode={mode} setMode={setMode} /><button className="im-primary" onClick={openCreate}>+ Add customer</button></div>
+    </div>
+
+    {selected ? (
+      <section className="im-panel">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+          <h2 style={{ margin: 0 }}>{selected.name}</h2>
+          <span className={`im-status ${selected.type === 'wholesaler' ? 'credit' : 'settled'}`} style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{selected.type}</span>
+        </div>
+        <p style={{ color: 'var(--muted)' }}>{selected.phone || 'No phone'}</p>
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}>
+          <div style={{ flex: 1, padding: '12px', background: selected.outstandingPaise > 0 ? '#fee7e5' : '#e8f5e9', borderRadius: '4px' }}>
+            <small>Outstanding</small>
+            <div style={{ fontSize: '20px', fontWeight: 600, color: selected.outstandingPaise > 0 ? '#a43932' : '#2e7d32' }}>{money(selected.outstandingPaise)}</div>
+          </div>
+          <div style={{ flex: 1, padding: '12px', background: selected.advancePaise > 0 ? '#e3f2fd' : '#f5f5f5', borderRadius: '4px' }}>
+            <small>Advance</small>
+            <div style={{ fontSize: '20px', fontWeight: 600, color: selected.advancePaise > 0 ? '#0d47a1' : '#666' }}>{money(selected.advancePaise)}</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="im-secondary" onClick={() => setSelectedId(null)}>← Back to list</button>
+          <button className="action-edit" onClick={() => openEdit(selected)}>Edit</button>
+          <button className="action-delete" onClick={() => { remove(selected); setSelectedId(null); }}>Delete</button>
+        </div>
+      </section>
+    ) : data.customers.length === 0 ? (
+      <Empty title="No customers yet" text="Add customers to track their purchase history and balance." action="Add customer" onAction={openCreate} />
+    ) : mode === 'cards' ? (
+      <div className="im-party-grid">
+        {data.customers.map(c => (
+          <article className="im-party-card supplier-card" key={c.id}>
+            <button className="card-open" onClick={() => setSelectedId(c.id)}>
+              <div className="supplier-info-rows">
+                <span className="supplier-row-label">Name</span><span className="supplier-row-value">{c.name}</span>
+                <span className="supplier-row-label">Type</span><span className="supplier-row-value"><span className={`im-status ${c.type === 'wholesaler' ? 'credit' : 'settled'}`}>{c.type === 'wholesaler' ? 'Wholesaler' : 'Retailer'}</span></span>
+                {c.phone && <><span className="supplier-row-label">Phone</span><span className="supplier-row-value">{c.phone}</span></>}
+                <span className="supplier-row-label">Balance</span><span className="supplier-row-value"><CustomerBalance c={c} /></span>
+              </div>
+            </button>
+            <SupplierActions edit={() => openEdit(c)} remove={() => remove(c)} />
+          </article>
+        ))}
+      </div>
+    ) : (
+      <section className="im-panel im-table-scroll">
+        <table><thead><tr><th>Name</th><th>Type</th><th>Phone</th><th>Balance</th><th>Actions</th></tr></thead>
+          <tbody>{data.customers.map(c => (
+            <tr key={c.id}>
+              <td><button className="table-link" onClick={() => setSelectedId(c.id)}>{c.name}</button></td>
+              <td><span className={`im-status ${c.type === 'wholesaler' ? 'credit' : 'settled'}`}>{c.type === 'wholesaler' ? 'Wholesaler' : 'Retailer'}</span></td>
+              <td>{c.phone || '—'}</td>
+              <td><CustomerBalance c={c} /></td>
+              <td><SupplierActions edit={() => openEdit(c)} remove={() => remove(c)} /></td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </section>
+    )}
+
+    {showForm && <CustomerForm form={form} setForm={setForm} submit={submit} close={() => { setEditing(null); setShowForm(false); }} editing={!!editing} />}
+  </>;
 }
 
 export function BillingWorkspace() {
@@ -1150,6 +1238,7 @@ ${sep}`;
 
 export function EmployeesWorkspace() {
   const { run, notice, error } = useSimpleInventory();
+  const [mode, setMode] = useState<Mode>('cards');
   const [showForm, setShowForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<storage.Employee | null>(null);
   const [form, setForm] = useState({ name: '', phone: '', daySalary: '', openingAdvance: '', openingDue: '' });
@@ -1208,7 +1297,7 @@ export function EmployeesWorkspace() {
     <Feedback notice={notice} error={error} />
     <div className="im-section-actions">
       <div><p className="im-kicker">EMPLOYEES</p><h2 className="im-page-title">Employee accounts</h2></div>
-      <button className="im-primary" onClick={openAdd}>+ Add employee</button>
+      <div className="action-group"><ViewToggle mode={mode} setMode={setMode} /><button className="im-primary" onClick={openAdd}>+ Add employee</button></div>
     </div>
 
     {showForm && (
@@ -1251,38 +1340,48 @@ export function EmployeesWorkspace() {
           <button className="action-delete" onClick={() => handleDelete(selected)}>Delete</button>
         </div>
       </section>
+    ) : employees.length === 0 ? (
+      <Empty title="No employees yet" text="Add employees to track their salary and advance." action="Add employee" onAction={openAdd} />
+    ) : mode === 'cards' ? (
+      <div className="im-party-grid">
+        {employees.map(emp => (
+          <article className="im-party-card supplier-card" key={emp.id}>
+            <button className="card-open" onClick={() => setSelectedId(emp.id)}>
+              <div className="supplier-info-rows">
+                <span className="supplier-row-label">Name</span><span className="supplier-row-value">{emp.name}</span>
+                {emp.phone && <><span className="supplier-row-label">Phone</span><span className="supplier-row-value">{emp.phone}</span></>}
+                <span className="supplier-row-label">Day salary</span><span className="supplier-row-value">{money(emp.daySalaryPaise)}</span>
+                <span className="supplier-row-label">Balance</span><span className="supplier-row-value">
+                  {emp.advancePaise > 0 ? <span style={{ color: '#0d47a1' }}>{money(emp.advancePaise)} adv</span>
+                    : emp.duePaise > 0 ? <span style={{ color: '#e65100' }}>{money(emp.duePaise)} due</span>
+                    : <span style={{ color: '#666' }}>—</span>}
+                </span>
+              </div>
+            </button>
+            <SupplierActions edit={() => openEdit(emp)} remove={() => handleDelete(emp)} />
+          </article>
+        ))}
+      </div>
     ) : (
-      <section className="im-panel">
-        <div className="im-panel-title"><h2>Employees</h2><span>{employees.length} total</span></div>
-        {employees.length === 0 ? (
-          <Empty title="No employees yet" text="Add employees to track their salary and advance." />
-        ) : (
-          <div className="im-table-scroll">
-            <table>
-              <thead><tr><th>Name</th><th>Phone</th><th>Day Salary</th><th>Balance</th><th></th></tr></thead>
-              <tbody>
-                {employees.map(emp => (
-                  <tr key={emp.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedId(emp.id)}>
-                    <td><b>{emp.name}</b></td>
-                    <td>{emp.phone || '—'}</td>
-                    <td>{money(emp.daySalaryPaise)}</td>
-                    <td>
-                      {emp.advancePaise > 0
-                        ? <span style={{ color: '#0d47a1' }}>{money(emp.advancePaise)} adv</span>
-                        : emp.duePaise > 0
-                        ? <span style={{ color: '#e65100' }}>{money(emp.duePaise)} due</span>
-                        : <span style={{ color: '#666' }}>—</span>}
-                    </td>
-                    <td onClick={e => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
-                      <button className="action-edit" onClick={() => openEdit(emp)}>Edit</button>{' '}
-                      <button className="action-delete" onClick={() => handleDelete(emp)}>Delete</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      <section className="im-panel im-table-scroll">
+        <table>
+          <thead><tr><th>Name</th><th>Phone</th><th>Day Salary</th><th>Balance</th><th>Actions</th></tr></thead>
+          <tbody>
+            {employees.map(emp => (
+              <tr key={emp.id}>
+                <td><button className="table-link" onClick={() => setSelectedId(emp.id)}>{emp.name}</button></td>
+                <td>{emp.phone || '—'}</td>
+                <td>{money(emp.daySalaryPaise)}</td>
+                <td>
+                  {emp.advancePaise > 0 ? <span style={{ color: '#0d47a1' }}>{money(emp.advancePaise)} adv</span>
+                    : emp.duePaise > 0 ? <span style={{ color: '#e65100' }}>{money(emp.duePaise)} due</span>
+                    : <span style={{ color: '#666' }}>—</span>}
+                </td>
+                <td><SupplierActions edit={() => openEdit(emp)} remove={() => handleDelete(emp)} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </section>
     )}
   </>;

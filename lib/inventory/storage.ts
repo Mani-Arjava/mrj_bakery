@@ -439,6 +439,12 @@ export function updateCustomer(customerId: string, updates: Partial<Omit<Custome
   save(data);
 }
 
+export function deleteCustomer(customerId: string) {
+  const data = getData();
+  data.customers = data.customers.filter(c => c.id !== customerId);
+  save(data);
+}
+
 export function getCustomerBalance(customerId: string): { outstandingPaise: number; advancePaise: number } {
   const data = getData();
   const customer = data.customers.find(c => c.id === customerId);
