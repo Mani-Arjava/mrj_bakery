@@ -486,7 +486,7 @@ export function ProductsWorkspace() {
               <option value="">— Not linked —</option>
               {data.productionItems.map(pi => <option key={pi.id} value={pi.id}>{pi.name}</option>)}
             </select>
-            {data.productionItems.length === 0 && <small style={{ color: 'var(--muted)' }}>Create production items on the Recipes page first.</small>}
+            {data.productionItems.length === 0 && <small style={{ color: 'var(--muted)' }}>Go to the Production page to create production items first.</small>}
           </label>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button type="button" className="im-secondary" onClick={() => setShowForm(false)}>Cancel</button>
@@ -562,6 +562,32 @@ export function ProductionWorkspace() {
   const [matDrafts, setMatDrafts] = useState<Array<{ itemId: string; quantity: string }>>([{ itemId: '', quantity: '' }]);
   const [prodDrafts, setProdDrafts] = useState<Array<{ productId: string; quantity: string }>>([{ productId: '', quantity: '' }]);
   const [summaryDate, setSummaryDate] = useState(today());
+  const [showItemForm, setShowItemForm] = useState(false);
+  const [editingItem, setEditingItem] = useState<storage.ProductionItem | null>(null);
+  const [itemForm, setItemForm] = useState({ name: '', productionUnit: 'KG' as 'KG' | 'Tray' });
+
+  function submitItem(e: FormEvent) {
+    e.preventDefault();
+    if (!itemForm.name.trim()) return;
+    const payload = { name: itemForm.name.trim(), productionUnit: itemForm.productionUnit, piecesPerUnit: 1 };
+    run(() => {
+      if (editingItem) storage.updateProductionItem(editingItem.id, payload);
+      else storage.addProductionItem(payload);
+    });
+    setShowItemForm(false);
+    setEditingItem(null);
+    setItemForm({ name: '', productionUnit: 'KG' });
+  }
+
+  function editItem(item: storage.ProductionItem) {
+    setEditingItem(item);
+    setItemForm({ name: item.name, productionUnit: item.productionUnit });
+    setShowItemForm(true);
+  }
+
+  function removeItem(item: storage.ProductionItem) {
+    if (window.confirm(`Delete "${item.name}"?`)) run(() => storage.deleteProductionItem(item.id));
+  }
 
   function resetForm() {
     setDate(today());
@@ -662,6 +688,54 @@ export function ProductionWorkspace() {
   return <>
     <Feedback notice={notice} error={error} />
     <div className="im-section-actions"><div><p className="im-kicker">PRODUCTION</p><h2 className="im-page-title">Record daily production</h2></div></div>
+
+    <section className="im-panel">
+      <div className="im-panel-title">
+        <h2>Production Items</h2>
+        <button className="im-primary" onClick={() => { setEditingItem(null); setItemForm({ name: '', productionUnit: 'KG' }); setShowItemForm(true); }}>+ Add item</button>
+      </div>
+      {showItemForm && (
+        <form onSubmit={submitItem} style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', marginBottom: '16px', flexWrap: 'wrap' }}>
+          <label style={{ flex: 1, minWidth: '160px', margin: 0 }}>Name
+            <input required autoFocus value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e.target.value })} placeholder="e.g. Roll Cake" />
+          </label>
+          <label style={{ margin: 0 }}>Unit
+            <select value={itemForm.productionUnit} onChange={e => setItemForm({ ...itemForm, productionUnit: e.target.value as 'KG' | 'Tray' })}>
+              <option value="KG">KG</option>
+              <option value="Tray">Tray</option>
+            </select>
+          </label>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button type="button" className="im-secondary" onClick={() => { setShowItemForm(false); setEditingItem(null); }}>Cancel</button>
+            <button type="submit" className="im-primary">{editingItem ? 'Update' : 'Save'}</button>
+          </div>
+        </form>
+      )}
+      {data.productionItems.length === 0 ? (
+        <p className="im-muted" style={{ fontSize: '13px' }}>No production items yet. Add your first item above.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: '8px' }}>
+          {data.productionItems.map(item => {
+            const linkedProducts = data.products.filter(p => p.productionItemId === item.id);
+            return (
+              <div key={item.id} className="production-summary-row" style={{ alignItems: 'flex-start' }}>
+                <div>
+                  <b style={{ fontSize: '13px' }}>{item.name}</b>
+                  <span style={{ fontSize: '11px', color: 'var(--muted)', marginLeft: '8px' }}>{item.productionUnit}</span>
+                  {linkedProducts.length > 0 && (
+                    <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '3px' }}>→ {linkedProducts.map(p => p.name).join(', ')}</div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                  <button className="action-edit" onClick={() => editItem(item)}>Edit</button>
+                  <button className="action-delete" onClick={() => removeItem(item)}>Delete</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
 
     <section className="im-panel">
       <div className="im-purchase-header" style={{ marginBottom: '16px' }}>
