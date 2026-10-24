@@ -560,7 +560,7 @@ export function ProductionWorkspace() {
   const [notes, setNotes] = useState('');
   const [editingBatch, setEditingBatch] = useState<storage.ProductionBatch | null>(null);
   const [matDrafts, setMatDrafts] = useState<Array<{ itemId: string; quantity: string }>>([{ itemId: '', quantity: '' }]);
-  const [prodDrafts, setProdDrafts] = useState<Array<{ productId: string; quantity: string }>>([{ productId: '', quantity: '' }]);
+  const [prodDrafts, setProdDrafts] = useState<Array<{ productionItemId: string; quantity: string }>>([{ productionItemId: '', quantity: '' }]);
   const [summaryDate, setSummaryDate] = useState(today());
   const [showItemForm, setShowItemForm] = useState(false);
   const [editingItem, setEditingItem] = useState<storage.ProductionItem | null>(null);
@@ -594,7 +594,7 @@ export function ProductionWorkspace() {
     setNotes('');
     setEditingBatch(null);
     setMatDrafts([{ itemId: '', quantity: '' }]);
-    setProdDrafts([{ productId: '', quantity: '' }]);
+    setProdDrafts([{ productionItemId: '', quantity: '' }]);
   }
 
   function handleSubmit(e: FormEvent) {
@@ -624,10 +624,11 @@ export function ProductionWorkspace() {
     }
 
     const productsProduced = prodDrafts
-      .filter(d => d.productId && Number(d.quantity) > 0)
+      .filter(d => d.productionItemId && Number(d.quantity) > 0)
       .map(d => {
-        const product = data.products.find(p => p.id === d.productId)!;
-        return { productId: product.id, productName: product.name, quantity: Number(d.quantity), unit: 'pcs' };
+        const item = data.productionItems.find(pi => pi.id === d.productionItemId)!;
+        const unit = data.products.find(p => p.productionItemId === item.id)?.conversionUnit ?? 'KG';
+        return { productionItemId: item.id, productionItemName: item.name, quantity: Number(d.quantity), unit };
       });
     const batchData = { date, rawMaterials, productsProduced, notes: notes || undefined };
     run(() => {
@@ -648,8 +649,8 @@ export function ProductionWorkspace() {
     );
     setProdDrafts(
       batch.productsProduced?.length
-        ? batch.productsProduced.map(p => ({ productId: p.productId, quantity: String(p.quantity) }))
-        : [{ productId: '', quantity: '' }]
+        ? batch.productsProduced.map(p => ({ productionItemId: p.productionItemId, quantity: String(p.quantity) }))
+        : [{ productionItemId: '', quantity: '' }]
     );
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -672,16 +673,16 @@ export function ProductionWorkspace() {
   const prodTotals: Record<string, { name: string; qty: number; unit: string }> = {};
   for (const batch of dayBatches) {
     for (const p of batch.productsProduced ?? []) {
-      if (!prodTotals[p.productId]) prodTotals[p.productId] = { name: p.productName, qty: 0, unit: p.unit ?? 'pcs' };
-      prodTotals[p.productId].qty += p.quantity;
+      if (!prodTotals[p.productionItemId]) prodTotals[p.productionItemId] = { name: p.productionItemName, qty: 0, unit: p.unit ?? 'KG' };
+      prodTotals[p.productionItemId].qty += p.quantity;
     }
   }
 
   const allProdStock: Record<string, { name: string; qty: number; unit: string }> = {};
   for (const batch of allProduction) {
     for (const p of batch.productsProduced ?? []) {
-      if (!allProdStock[p.productId]) allProdStock[p.productId] = { name: p.productName, qty: 0, unit: p.unit ?? 'pcs' };
-      allProdStock[p.productId].qty += p.quantity;
+      if (!allProdStock[p.productionItemId]) allProdStock[p.productionItemId] = { name: p.productionItemName, qty: 0, unit: p.unit ?? 'KG' };
+      allProdStock[p.productionItemId].qty += p.quantity;
     }
   }
 
@@ -786,22 +787,22 @@ export function ProductionWorkspace() {
           </div>
           {prodDrafts.map((draft, idx) => (
             <div key={idx} className="prod-line">
-              <select value={draft.productId}
-                onChange={e => setProdDrafts(prodDrafts.map((d, i) => i === idx ? { productId: e.target.value, quantity: '' } : d))}>
-                <option value="">Select product…</option>
-                {data.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              <select value={draft.productionItemId}
+                onChange={e => setProdDrafts(prodDrafts.map((d, i) => i === idx ? { productionItemId: e.target.value, quantity: '' } : d))}>
+                <option value="">Select production item…</option>
+                {data.productionItems.map(pi => <option key={pi.id} value={pi.id}>{pi.name}</option>)}
               </select>
-              <input type="number" min="1" step="1" value={draft.quantity}
+              <input type="number" min="0.001" step="0.001" value={draft.quantity}
                 onChange={e => setProdDrafts(prodDrafts.map((d, i) => i === idx ? { ...d, quantity: e.target.value } : d))}
                 placeholder="0" />
-              <span className="prod-unit-label">pcs</span>
+              <span className="prod-unit-label">{data.products.find(p => p.productionItemId === draft.productionItemId)?.conversionUnit ?? 'KG'}</span>
               <button type="button" className="im-remove"
-                onClick={() => prodDrafts.length > 1 ? setProdDrafts(prodDrafts.filter((_, i) => i !== idx)) : setProdDrafts([{ productId: '', quantity: '' }])}>×</button>
+                onClick={() => prodDrafts.length > 1 ? setProdDrafts(prodDrafts.filter((_, i) => i !== idx)) : setProdDrafts([{ productionItemId: '', quantity: '' }])}>×</button>
             </div>
           ))}
         </div>
         <div className="purchase-actions">
-          <button type="button" className="im-text-button" onClick={() => setProdDrafts([...prodDrafts, { productId: '', quantity: '' }])}>+ Add product</button>
+          <button type="button" className="im-text-button" onClick={() => setProdDrafts([...prodDrafts, { productionItemId: '', quantity: '' }])}>+ Add production item</button>
         </div>
 
         <label>Notes (optional)
@@ -905,8 +906,8 @@ export function ProductionWorkspace() {
                   <p className="im-kicker" style={{ marginBottom: '4px' }}>Products Made</p>
                   {batch.productsProduced!.map((p, i) => (
                     <div key={i} className="production-summary-row">
-                      <span>{p.productName}</span>
-                      <b>{p.quantity} {p.unit ?? 'Pcs'}</b>
+                      <span>{p.productionItemName}</span>
+                      <b>{p.quantity} {p.unit}</b>
                     </div>
                   ))}
                 </div>
