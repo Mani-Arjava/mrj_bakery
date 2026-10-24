@@ -407,10 +407,10 @@ export function clearProductionHistory() {
 }
 
 // ========== CUSTOMERS ==========
-export function addCustomer(input: Omit<Customer, 'id' | 'outstandingPaise' | 'advancePaise'> & { previousBalancePaise?: number }) {
+export function addCustomer(input: Omit<Customer, 'id' | 'outstandingPaise' | 'advancePaise'> & { previousBalancePaise?: number; previousAdvancePaise?: number }) {
   const data = getData();
-  const { previousBalancePaise, ...rest } = input;
-  const customer: Customer = { id: id(), ...rest, outstandingPaise: previousBalancePaise ?? 0, advancePaise: 0 };
+  const { previousBalancePaise, previousAdvancePaise, ...rest } = input;
+  const customer: Customer = { id: id(), ...rest, outstandingPaise: previousBalancePaise ?? 0, advancePaise: previousAdvancePaise ?? 0 };
   data.customers.push(customer);
   save(data);
   return customer;
