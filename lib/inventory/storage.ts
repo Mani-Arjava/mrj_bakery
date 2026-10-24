@@ -498,12 +498,14 @@ export function postSale(input: Omit<SaleInvoice, 'id'>) {
     }
   }
 
-  // Update customer outstanding/advance
-  const oldOutstanding = customer.outstandingPaise;
-  customer.outstandingPaise = oldOutstanding + input.outstandingPaise;
-  if (input.paidPaise > 0 && customer.outstandingPaise < 0) {
-    customer.advancePaise = -customer.outstandingPaise;
+  // Update customer outstanding/advance — net across existing balance + this bill
+  const netDue = customer.outstandingPaise - customer.advancePaise + input.outstandingPaise;
+  if (netDue >= 0) {
+    customer.outstandingPaise = netDue;
+    customer.advancePaise = 0;
+  } else {
     customer.outstandingPaise = 0;
+    customer.advancePaise = -netDue;
   }
 
   save(data);
