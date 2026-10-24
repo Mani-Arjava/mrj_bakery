@@ -949,6 +949,7 @@ export function CustomersWorkspace() {
   const [editing, setEditing] = useState<storage.Customer | null>(null);
   const [form, setForm] = useState<CustomerFormValue>({ name: '', phone: '', type: 'retailer', previousBalance: '', previousAdvance: '' });
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [viewingInvoice, setViewingInvoice] = useState<any>(null);
 
   const blankForm = (): CustomerFormValue => ({ name: '', phone: '', type: 'retailer', previousBalance: '', previousAdvance: '' });
 
@@ -981,28 +982,60 @@ export function CustomersWorkspace() {
     </div>
 
     {selected ? (
-      <section className="im-panel">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-          <h2 style={{ margin: 0 }}>{selected.name}</h2>
-          <span className={`im-status ${selected.type === 'wholesaler' ? 'credit' : 'settled'}`} style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{selected.type}</span>
-        </div>
-        <p style={{ color: 'var(--muted)' }}>{selected.phone || 'No phone'}</p>
-        <div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}>
-          <div style={{ flex: 1, padding: '12px', background: selected.outstandingPaise > 0 ? '#fee7e5' : '#e8f5e9', borderRadius: '4px' }}>
-            <small>Outstanding</small>
-            <div style={{ fontSize: '20px', fontWeight: 600, color: selected.outstandingPaise > 0 ? '#a43932' : '#2e7d32' }}>{money(selected.outstandingPaise)}</div>
+      viewingInvoice ? (
+        <section className="im-panel" style={{ textAlign: 'center' }}>
+          <div className="bill-preview">{generateBillContent(viewingInvoice)}</div>
+          <BillActions invoice={viewingInvoice} />
+          <button className="im-primary" style={{ marginTop: '8px' }} onClick={() => setViewingInvoice(null)}>← Back to {selected.name}</button>
+        </section>
+      ) : <>
+        <section className="im-panel">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+            <h2 style={{ margin: 0 }}>{selected.name}</h2>
+            <span className={`im-status ${selected.type === 'wholesaler' ? 'credit' : 'settled'}`} style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{selected.type}</span>
           </div>
-          <div style={{ flex: 1, padding: '12px', background: selected.advancePaise > 0 ? '#e3f2fd' : '#f5f5f5', borderRadius: '4px' }}>
-            <small>Advance</small>
-            <div style={{ fontSize: '20px', fontWeight: 600, color: selected.advancePaise > 0 ? '#0d47a1' : '#666' }}>{money(selected.advancePaise)}</div>
+          <p style={{ color: 'var(--muted)' }}>{selected.phone || 'No phone'}</p>
+          <div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}>
+            <div style={{ flex: 1, padding: '12px', background: selected.outstandingPaise > 0 ? '#fee7e5' : '#e8f5e9', borderRadius: '4px' }}>
+              <small>Outstanding</small>
+              <div style={{ fontSize: '20px', fontWeight: 600, color: selected.outstandingPaise > 0 ? '#a43932' : '#2e7d32' }}>{money(selected.outstandingPaise)}</div>
+            </div>
+            <div style={{ flex: 1, padding: '12px', background: selected.advancePaise > 0 ? '#e3f2fd' : '#f5f5f5', borderRadius: '4px' }}>
+              <small>Advance</small>
+              <div style={{ fontSize: '20px', fontWeight: 600, color: selected.advancePaise > 0 ? '#0d47a1' : '#666' }}>{money(selected.advancePaise)}</div>
+            </div>
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="im-secondary" onClick={() => setSelectedId(null)}>← Back to list</button>
-          <button className="action-edit" onClick={() => openEdit(selected)}>Edit</button>
-          <button className="action-delete" onClick={() => { remove(selected); setSelectedId(null); }}>Delete</button>
-        </div>
-      </section>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="im-secondary" onClick={() => setSelectedId(null)}>← Back to list</button>
+            <button className="action-edit" onClick={() => openEdit(selected)}>Edit</button>
+            <button className="action-delete" onClick={() => { remove(selected); setSelectedId(null); }}>Delete</button>
+          </div>
+        </section>
+        <section className="im-panel" style={{ marginTop: '16px' }}>
+          {(() => {
+            const salesHistory = storage.getSalesHistory(selected.id);
+            return <>
+              <div className="im-panel-title"><h2>Bill History</h2><span>{salesHistory.length} total</span></div>
+              {salesHistory.length === 0
+                ? <div className="im-empty"><b>No bills yet</b><p>Bills will appear here once sales are recorded for this customer.</p></div>
+                : <div style={{ display: 'grid', gap: '10px' }}>
+                  {salesHistory.map(sale => (
+                    <div key={sale.id} style={{ border: '1px solid var(--line)', borderRadius: '8px', padding: '12px 14px', background: '#fbfcf8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{sale.date}</div>
+                        <small style={{ color: 'var(--muted)', fontSize: '12px' }}>{sale.lines.length} item{sale.lines.length === 1 ? '' : 's'} · {money(sale.totalPaise)}</small>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button type="button" className="im-secondary" style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 600 }} onClick={() => setViewingInvoice(sale)}>View</button>
+                        <button type="button" style={{ background: 'transparent', border: '1px solid var(--line)', borderRadius: '4px', padding: '6px 12px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', color: 'var(--muted)' }} onClick={() => { setViewingInvoice(sale); setTimeout(() => window.print(), 100); }}>Print</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>}
+            </>;
+          })()}
+        </section>
+      </>
     ) : data.customers.length === 0 ? (
       <Empty title="No customers yet" text="Add customers to track their purchase history and balance." action="Add customer" onAction={openCreate} />
     ) : mode === 'cards' ? (
@@ -1039,6 +1072,129 @@ export function CustomersWorkspace() {
 
     {showForm && <CustomerForm form={form} setForm={setForm} submit={submit} close={() => { setEditing(null); setShowForm(false); }} editing={!!editing} />}
   </>;
+}
+
+function generateBillContent(invoice: any) {
+  const W = 43;
+  const sep  = '═'.repeat(W);
+  const dash = '─'.repeat(W);
+  const ctr  = (s: string) => s.padStart(Math.floor((W + s.length) / 2)).padEnd(W);
+  const HDR  = `${'Item'.padEnd(15)} ${'Qty'.padStart(4)}  ${'Rate'.padStart(9)}  ${'Total'.padStart(10)}`;
+
+  let content = `${sep}
+${ctr('MRJ BEST BAKERY')}
+${ctr('12A Main Bazaar St.')}
+${ctr('New Aayakudi, Palani')}
+${ctr('Phone: +91-8248395591')}
+${sep}
+
+Bill #: ${invoice.id.slice(0, 8).toUpperCase()}
+Date  : ${invoice.date}
+Name  : ${invoice.customerName}
+
+${HDR}
+${dash}
+`;
+
+  invoice.lines.forEach((l: any) => {
+    const name  = l.productName.substring(0, 15).padEnd(15);
+    const qty   = String(l.quantityPackets).padStart(4);
+    const rate  = `₹${(l.pricePerPacketPaise / 100).toFixed(2)}`.padStart(9);
+    const total = `₹${(l.totalPaise / 100).toFixed(2)}`.padStart(10);
+    content += `${name} ${qty}  ${rate}  ${total}\n`;
+  });
+
+  const totalItems  = invoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0);
+  const prevDue     = invoice.previousOutstandingPaise ?? 0;
+  const prevAdv     = invoice.previousAdvancePaise ?? 0;
+  const hasPrev     = prevDue > 0 || prevAdv > 0;
+  const grandTotal  = invoice.totalPaise + prevDue - prevAdv;
+  const netOut      = grandTotal - invoice.paidPaise;
+
+  const fmt = (n: number) => `₹${(Math.abs(n) / 100).toFixed(2)}`.padStart(30);
+
+  let summaryLines = `Subtotal    :${fmt(invoice.totalPaise)}\n`;
+  if (prevDue > 0) summaryLines += `Old due     :${fmt(prevDue)}\n`;
+  if (prevAdv > 0) summaryLines += `Old advance :${fmt(prevAdv)}\n`;
+  if (hasPrev)     summaryLines += `Total       :${fmt(grandTotal)}\n`;
+  summaryLines += `Amount Paid :${fmt(invoice.paidPaise)}\n`;
+  summaryLines += `Outstanding :${(netOut <= 0 ? `₹${(Math.abs(netOut) / 100).toFixed(2)} adv` : `₹${(netOut / 100).toFixed(2)}`).padStart(30)}`;
+
+  content += `${dash}
+Total Items :${String(totalItems).padStart(30)}
+${dash}
+${summaryLines}
+${sep}
+${ctr('Thank you for your purchase!')}
+${sep}`;
+
+  return content;
+}
+
+async function generateBillBlob(content: string): Promise<Blob> {
+  const lines = content.split('\n');
+  const canvas = document.createElement('canvas');
+  const fontSize = 13;
+  const ctx = canvas.getContext('2d')!;
+  ctx.font = `600 ${fontSize}px "Courier New", Courier, monospace`;
+  const cw = ctx.measureText('W').width;
+  const lh = Math.ceil(fontSize * 1.65);
+  const pad = 18;
+  const maxLen = Math.max(...lines.map(l => l.length));
+  canvas.width  = Math.ceil(maxLen * cw) + pad * 2;
+  canvas.height = lines.length * lh + pad * 2;
+  ctx.font = `600 ${fontSize}px "Courier New", Courier, monospace`;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#111111';
+  lines.forEach((line, i) => ctx.fillText(line, pad, pad + fontSize + i * lh));
+  return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Canvas toBlob failed')), 'image/png', 1.0));
+}
+
+async function generatePdfBlob(content: string): Promise<Blob> {
+  const imgBlob = await generateBillBlob(content);
+  const imgUrl = URL.createObjectURL(imgBlob);
+  const img = new Image();
+  img.src = imgUrl;
+  await new Promise(resolve => { img.onload = resolve; });
+  const widthMm = 80;
+  const heightMm = (img.naturalHeight / img.naturalWidth) * widthMm;
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ format: [widthMm, heightMm], unit: 'mm', orientation: 'portrait' });
+  doc.addImage(img, 'PNG', 0, 0, widthMm, heightMm);
+  URL.revokeObjectURL(imgUrl);
+  return doc.output('blob');
+}
+
+async function shareAsPdf(content: string, customerName: string) {
+  const blob = await generatePdfBlob(content);
+  const file = new File([blob], `bill-${customerName}.pdf`, { type: 'application/pdf' });
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ title: `Bill — ${customerName}`, files: [file] }); return; } catch { /* cancelled */ }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `bill-${customerName}.pdf`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function savePdf(content: string, customerName: string) {
+  const blob = await generatePdfBlob(content);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `bill-${customerName}.pdf`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function BillActions({ invoice }: { invoice: any }) {
+  const content = generateBillContent(invoice);
+  return (
+    <div className="bill-action-row">
+      <button className="im-secondary" onClick={() => shareAsPdf(content, invoice.customerName)}>Share PDF</button>
+      <button className="im-secondary" onClick={() => savePdf(content, invoice.customerName)}>Save PDF</button>
+      <button className="im-secondary" onClick={() => window.print()}>Print</button>
+    </div>
+  );
 }
 
 export function BillingWorkspace() {
@@ -1095,137 +1251,6 @@ export function BillingWorkspace() {
     setViewingInvoice(null);
   }
 
-  function generateBillContent(invoice: any) {
-    const W = 43;
-    const sep  = '═'.repeat(W);
-    const dash = '─'.repeat(W);
-    const ctr  = (s: string) => s.padStart(Math.floor((W + s.length) / 2)).padEnd(W);
-    const HDR  = `${'Item'.padEnd(15)} ${'Qty'.padStart(4)}  ${'Rate'.padStart(9)}  ${'Total'.padStart(10)}`;
-
-    let content = `${sep}
-${ctr('MRJ BEST BAKERY')}
-${ctr('12A Main Bazaar St.')}
-${ctr('New Aayakudi, Palani')}
-${ctr('Phone: +91-8248395591')}
-${sep}
-
-Bill #: ${invoice.id.slice(0, 8).toUpperCase()}
-Date  : ${invoice.date}
-Name  : ${invoice.customerName}
-
-${HDR}
-${dash}
-`;
-
-    invoice.lines.forEach((l: any) => {
-      const name  = l.productName.substring(0, 15).padEnd(15);
-      const qty   = String(l.quantityPackets).padStart(4);
-      const rate  = `₹${(l.pricePerPacketPaise / 100).toFixed(2)}`.padStart(9);
-      const total = `₹${(l.totalPaise / 100).toFixed(2)}`.padStart(10);
-      content += `${name} ${qty}  ${rate}  ${total}\n`;
-    });
-
-    const totalItems  = invoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0);
-    const prevDue     = invoice.previousOutstandingPaise ?? 0;
-    const prevAdv     = invoice.previousAdvancePaise ?? 0;
-    const hasPrev     = prevDue > 0 || prevAdv > 0;
-    const grandTotal  = invoice.totalPaise + prevDue - prevAdv;
-    const netOut      = grandTotal - invoice.paidPaise;
-
-    const fmt = (n: number) => `₹${(Math.abs(n) / 100).toFixed(2)}`.padStart(30);
-
-    let summaryLines = `Subtotal    :${fmt(invoice.totalPaise)}\n`;
-    if (prevDue > 0) summaryLines += `Old due     :${fmt(prevDue)}\n`;
-    if (prevAdv > 0) summaryLines += `Old advance :${fmt(prevAdv)}\n`;
-    if (hasPrev)     summaryLines += `Total       :${fmt(grandTotal)}\n`;
-    summaryLines += `Amount Paid :${fmt(invoice.paidPaise)}\n`;
-    summaryLines += `Outstanding :${(netOut <= 0 ? `₹${(Math.abs(netOut) / 100).toFixed(2)} adv` : `₹${(netOut / 100).toFixed(2)}`).padStart(30)}`;
-
-    content += `${dash}
-Total Items :${String(totalItems).padStart(30)}
-${dash}
-${summaryLines}
-${sep}
-${ctr('Thank you for your purchase!')}
-${sep}`;
-
-    return content;
-  }
-
-  async function generateBillBlob(content: string): Promise<Blob> {
-    const lines = content.split('\n');
-    const canvas = document.createElement('canvas');
-    const fontSize = 13;
-    const ctx = canvas.getContext('2d')!;
-    ctx.font = `600 ${fontSize}px "Courier New", Courier, monospace`;
-    const cw = ctx.measureText('W').width;
-    const lh = Math.ceil(fontSize * 1.65);
-    const pad = 18;
-    const maxLen = Math.max(...lines.map(l => l.length));
-    canvas.width  = Math.ceil(maxLen * cw) + pad * 2;
-    canvas.height = lines.length * lh + pad * 2;
-    ctx.font = `600 ${fontSize}px "Courier New", Courier, monospace`;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#111111';
-    lines.forEach((line, i) => ctx.fillText(line, pad, pad + fontSize + i * lh));
-    return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Canvas toBlob failed')), 'image/png', 1.0));
-  }
-
-  async function generatePdfBlob(content: string): Promise<Blob> {
-    const imgBlob = await generateBillBlob(content);
-    const imgUrl = URL.createObjectURL(imgBlob);
-    const img = new Image();
-    img.src = imgUrl;
-    await new Promise(resolve => { img.onload = resolve; });
-    const widthMm = 80;
-    const heightMm = (img.naturalHeight / img.naturalWidth) * widthMm;
-    const { jsPDF } = await import('jspdf');
-    const doc = new jsPDF({ format: [widthMm, heightMm], unit: 'mm', orientation: 'portrait' });
-    doc.addImage(img, 'PNG', 0, 0, widthMm, heightMm);
-    URL.revokeObjectURL(imgUrl);
-    return doc.output('blob');
-  }
-
-  async function shareAsPdf(content: string, customerName: string) {
-    const blob = await generatePdfBlob(content);
-    const file = new File([blob], `bill-${customerName}.pdf`, { type: 'application/pdf' });
-    if (navigator.canShare?.({ files: [file] })) {
-      try { await navigator.share({ title: `Bill — ${customerName}`, files: [file] }); return; } catch { /* cancelled */ }
-    }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `bill-${customerName}.pdf`; a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function sendWhatsApp(content: string, customerName: string) {
-    const blob = await generatePdfBlob(content);
-    const file = new File([blob], `bill-${customerName}.pdf`, { type: 'application/pdf' });
-    if (navigator.canShare?.({ files: [file] })) {
-      try { await navigator.share({ title: `Bill — ${customerName}`, files: [file] }); return; } catch { /* cancelled */ }
-    }
-    window.open(`https://wa.me/?text=${encodeURIComponent(content)}`, '_blank', 'noopener');
-  }
-
-  async function savePdf(content: string, customerName: string) {
-    const blob = await generatePdfBlob(content);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `bill-${customerName}.pdf`; a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function BillActions({ invoice }: { invoice: any }) {
-    const content = generateBillContent(invoice);
-    return (
-      <div className="bill-action-row">
-        <button className="im-secondary" onClick={() => shareAsPdf(content, invoice.customerName)}>Share PDF</button>
-        <button className="im-secondary" onClick={() => savePdf(content, invoice.customerName)}>Save PDF</button>
-        <button className="im-secondary" onClick={() => window.print()}>Print</button>
-      </div>
-    );
-  }
 
   if (stage === 'select-customer') {
     return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Customer sales</h2></div><section className="im-panel"><form onSubmit={handleAddCustomer}><label>Select customer<select required value={customerId} onChange={(e) => setCustomerId(e.target.value)}><option value="">Choose a customer…</option>{data.customers.map((c) => <option key={c.id} value={c.id}>{c.name}{c.outstandingPaise > 0 ? ` (₹${(c.outstandingPaise / 100).toFixed(0)} due)` : ''}</option>)}</select></label><button type="submit" className="im-primary">Next</button></form></section></>;
