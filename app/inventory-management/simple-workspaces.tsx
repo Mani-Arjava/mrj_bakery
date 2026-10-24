@@ -1054,6 +1054,7 @@ export function BillingWorkspace() {
   const selected = customerId ? data.customers.find(c => c.id === customerId) : null;
   const totalPaise = lines.reduce((sum, line) => sum + (line.quantity * line.pricePerPacketPaise), 0);
   const outstandingPaise = totalPaise - paid;
+  const netPaise = totalPaise + (selected?.outstandingPaise ?? 0) - (selected?.advancePaise ?? 0) - paid;
 
   function priceForCustomer(product: storage.Product): number {
     if (selected?.type === 'wholesaler' && product.wholesalePricePerPacketPaise != null) return product.wholesalePricePerPacketPaise;
@@ -1078,7 +1079,7 @@ export function BillingWorkspace() {
         if (!product) throw new Error('Product not found');
         return { productId: line.productId, productName: product.name, quantityPackets: line.quantity, pricePerPacketPaise: line.pricePerPacketPaise, totalPaise: line.quantity * line.pricePerPacketPaise };
       });
-      const invoice = storage.postSale({ date, customerId, customerName: selected.name, lines: saleLines, totalPaise, paidPaise: paid, outstandingPaise });
+      const invoice = storage.postSale({ date, customerId, customerName: selected.name, lines: saleLines, totalPaise, paidPaise: paid, outstandingPaise, previousOutstandingPaise: selected.outstandingPaise, previousAdvancePaise: selected.advancePaise });
       setLastInvoice({ ...invoice, customerName: selected.name });
     });
 
@@ -1125,16 +1126,25 @@ ${dash}
     });
 
     const totalItems  = invoice.lines.reduce((sum: number, l: any) => sum + l.quantityPackets, 0);
-    const subtotal    = `₹${(invoice.totalPaise / 100).toFixed(2)}`.padStart(30);
-    const paidAmt     = `₹${(invoice.paidPaise / 100).toFixed(2)}`.padStart(30);
-    const outstanding = `₹${(invoice.outstandingPaise / 100).toFixed(2)}`.padStart(30);
+    const prevDue     = invoice.previousOutstandingPaise ?? 0;
+    const prevAdv     = invoice.previousAdvancePaise ?? 0;
+    const hasPrev     = prevDue > 0 || prevAdv > 0;
+    const grandTotal  = invoice.totalPaise + prevDue - prevAdv;
+    const netOut      = grandTotal - invoice.paidPaise;
+
+    const fmt = (n: number) => `₹${(Math.abs(n) / 100).toFixed(2)}`.padStart(30);
+
+    let summaryLines = `Subtotal    :${fmt(invoice.totalPaise)}\n`;
+    if (prevDue > 0) summaryLines += `Old due     :${fmt(prevDue)}\n`;
+    if (prevAdv > 0) summaryLines += `Old advance :${fmt(prevAdv)}\n`;
+    if (hasPrev)     summaryLines += `Total       :${fmt(grandTotal)}\n`;
+    summaryLines += `Amount Paid :${fmt(invoice.paidPaise)}\n`;
+    summaryLines += `Outstanding :${(netOut <= 0 ? `₹${(Math.abs(netOut) / 100).toFixed(2)} adv` : `₹${(netOut / 100).toFixed(2)}`).padStart(30)}`;
 
     content += `${dash}
 Total Items :${String(totalItems).padStart(30)}
 ${dash}
-Subtotal    :${subtotal}
-Amount Paid :${paidAmt}
-Outstanding :${outstanding}
+${summaryLines}
 ${sep}
 ${ctr('Thank you for your purchase!')}
 ${sep}`;
@@ -1231,7 +1241,7 @@ ${sep}`;
   }
 
   if (stage === 'confirm' && selected) {
-    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Confirm & pay</h2></div><section className="im-panel"><form onSubmit={handleConfirmSale}><div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>{lines.filter(l => l.productId).map((line, idx) => { const product = data.products.find(p => p.id === line.productId); return <tr key={idx}><td>{product?.name}</td><td>{line.quantity}</td><td>{money(line.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{money(line.quantity * line.pricePerPacketPaise)}</td></tr>; })}</tbody></table></div>{(() => { const netPaise = totalPaise + selected.outstandingPaise - selected.advancePaise - paid; return <div style={{ padding: '16px', background: '#f5f5f5', borderRadius: '4px', marginTop: '16px', display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px 24px', alignItems: 'center' }}><span>Total</span><strong style={{ textAlign: 'right', fontSize: '18px' }}>{money(totalPaise)}</strong><span>Old advance / due</span><span style={{ textAlign: 'right' }}>{selected.outstandingPaise > 0 ? <span style={{ color: '#a43932' }}>{money(selected.outstandingPaise)} due</span> : selected.advancePaise > 0 ? <span style={{ color: '#2e7d32' }}>{money(selected.advancePaise)} adv</span> : <span style={{ color: '#666' }}>—</span>}</span><span>Outstanding</span><strong style={{ textAlign: 'right', fontSize: '16px', color: netPaise > 0 ? '#a43932' : netPaise < 0 ? '#2e7d32' : '#666' }}>{netPaise !== 0 ? `${money(Math.abs(netPaise))} ${netPaise > 0 ? 'due' : 'adv'}` : '—'}</strong><label style={{ margin: 0 }}>Customer pays now (₹)</label><input type="number" min="0" step="0.01" value={paid / 100} onChange={(e) => setPaid(Math.round(Number(e.target.value) * 100))} style={{ textAlign: 'right', width: '120px' }} /></div>; })()}<div style={{ display: 'flex', gap: '8px' }}><button type="button" className="im-secondary" onClick={() => setStage('add-items')}>← Back</button><button type="submit" className="im-primary">Generate bill</button></div></form></section></>;
+    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Confirm & pay</h2></div><section className="im-panel"><form onSubmit={handleConfirmSale}><div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>{lines.filter(l => l.productId).map((line, idx) => { const product = data.products.find(p => p.id === line.productId); return <tr key={idx}><td>{product?.name}</td><td>{line.quantity}</td><td>{money(line.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{money(line.quantity * line.pricePerPacketPaise)}</td></tr>; })}</tbody></table></div><div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: '10px 16px', alignItems: 'center', marginTop: '16px', padding: '16px', background: '#f5f5f5', borderRadius: '4px' }}><span>Total</span><strong style={{ textAlign: 'right', fontSize: '18px' }}>{money(totalPaise)}</strong><span>Old advance / due</span><span style={{ textAlign: 'right' }}>{selected.outstandingPaise > 0 ? <span style={{ color: '#a43932' }}>{money(selected.outstandingPaise)} due</span> : selected.advancePaise > 0 ? <span style={{ color: '#2e7d32' }}>{money(selected.advancePaise)} adv</span> : <span style={{ color: '#666' }}>—</span>}</span><span>Outstanding</span><strong style={{ textAlign: 'right', fontSize: '16px', color: netPaise > 0 ? '#a43932' : netPaise < 0 ? '#2e7d32' : '#666' }}>{netPaise !== 0 ? `${money(Math.abs(netPaise))} ${netPaise > 0 ? 'due' : 'adv'}` : '—'}</strong><label style={{ margin: 0 }}>Customer pays now (₹)</label><input type="number" min="0" step="0.01" value={paid / 100} onChange={(e) => setPaid(Math.round(Number(e.target.value) * 100))} style={{ textAlign: 'right', width: '100%' }} /></div><div style={{ display: 'flex', gap: '8px' }}><button type="button" className="im-secondary" onClick={() => setStage('add-items')}>← Back</button><button type="submit" className="im-primary">Generate bill</button></div></form></section></>;
   }
 
   if (stage === 'preview' && lastInvoice) {

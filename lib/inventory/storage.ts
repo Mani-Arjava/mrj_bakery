@@ -38,7 +38,7 @@ export type ProductionBatch = {
 export type Customer = { id: string; name: string; phone: string; type: 'wholesaler' | 'retailer'; outstandingPaise: number; advancePaise: number };
 export type Employee = { id: string; name: string; phone: string; daySalaryPaise: number; advancePaise: number; duePaise: number };
 export type SaleLine = { productId: string; productName: string; quantityPackets: number; pricePerPacketPaise: number; totalPaise: number };
-export type SaleInvoice = { id: string; date: string; customerId: string; customerName: string; lines: SaleLine[]; totalPaise: number; paidPaise: number; outstandingPaise: number };
+export type SaleInvoice = { id: string; date: string; customerId: string; customerName: string; lines: SaleLine[]; totalPaise: number; paidPaise: number; outstandingPaise: number; previousOutstandingPaise?: number; previousAdvancePaise?: number };
 export type StockMovement = { id: string; date: string; productionItemId: string; quantityPieces: number; movementType: 'PRODUCTION' | 'SALE'; sourceId: string };
 
 export type InventoryData = {
