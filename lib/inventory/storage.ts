@@ -36,6 +36,7 @@ export type ProductionBatch = {
   notes?: string;
 };
 export type Customer = { id: string; name: string; phone: string; type: 'wholesaler' | 'retailer'; outstandingPaise: number; advancePaise: number };
+export type Employee = { id: string; name: string; phone: string; daySalaryPaise: number; advancePaise: number; duePaise: number };
 export type SaleLine = { productId: string; productName: string; quantityPackets: number; pricePerPacketPaise: number; totalPaise: number };
 export type SaleInvoice = { id: string; date: string; customerId: string; customerName: string; lines: SaleLine[]; totalPaise: number; paidPaise: number; outstandingPaise: number };
 export type StockMovement = { id: string; date: string; productionItemId: string; quantityPieces: number; movementType: 'PRODUCTION' | 'SALE'; sourceId: string };
@@ -49,11 +50,12 @@ export type InventoryData = {
   recipes: Recipe[];
   productionBatches: ProductionBatch[];
   customers: Customer[];
+  employees: Employee[];
   saleInvoices: SaleInvoice[];
   stockMovements: StockMovement[];
 };
 
-const emptyData = (): InventoryData => ({ suppliers: [], items: [], purchases: [], products: [], productionItems: [], recipes: [], productionBatches: [], customers: [], saleInvoices: [], stockMovements: [] });
+const emptyData = (): InventoryData => ({ suppliers: [], items: [], purchases: [], products: [], productionItems: [], recipes: [], productionBatches: [], customers: [], employees: [], saleInvoices: [], stockMovements: [] });
 function id() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`; }
 
 function migrateV1toV2(v1: any): InventoryData {
@@ -129,6 +131,7 @@ export function getData(): InventoryData {
       recipes: Array.isArray(parsed.recipes) ? parsed.recipes : [],
       productionBatches: Array.isArray(parsed.productionBatches) ? parsed.productionBatches : [],
       customers: Array.isArray(parsed.customers) ? parsed.customers.map((c: any) => ({ ...c, type: c.type ?? 'retailer' })) : [],
+      employees: Array.isArray(parsed.employees) ? parsed.employees : [],
       saleInvoices: Array.isArray(parsed.saleInvoices) ? parsed.saleInvoices : [],
       stockMovements: Array.isArray(parsed.stockMovements) ? parsed.stockMovements : [],
     };
@@ -485,4 +488,36 @@ export function postSale(input: Omit<SaleInvoice, 'id'>) {
 
 export function getSalesForDate(date: string) {
   return getData().saleInvoices.filter(inv => inv.date === date).sort((a, b) => b.id.localeCompare(a.id));
+}
+
+// ========== EMPLOYEES ==========
+export function addEmployee(input: Omit<Employee, 'id' | 'advancePaise' | 'duePaise'> & { openingAdvancePaise?: number; openingDuePaise?: number }) {
+  const data = getData();
+  if (!data.employees) data.employees = [];
+  const { openingAdvancePaise, openingDuePaise, ...rest } = input;
+  const employee: Employee = { id: id(), ...rest, advancePaise: openingAdvancePaise ?? 0, duePaise: openingDuePaise ?? 0 };
+  data.employees.push(employee);
+  save(data);
+  return employee;
+}
+
+export function updateEmployee(employeeId: string, updates: Partial<Omit<Employee, 'id'>>) {
+  const data = getData();
+  if (!data.employees) data.employees = [];
+  const employee = data.employees.find(e => e.id === employeeId);
+  if (!employee) throw new Error('Employee not found.');
+  Object.assign(employee, updates);
+  save(data);
+}
+
+export function deleteEmployee(employeeId: string) {
+  const data = getData();
+  if (!data.employees) data.employees = [];
+  data.employees = data.employees.filter(e => e.id !== employeeId);
+  save(data);
+}
+
+export function getAllEmployees(): Employee[] {
+  const data = getData();
+  return data.employees ?? [];
 }
