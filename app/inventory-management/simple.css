@@ -74,7 +74,7 @@ table th:nth-child(1){min-width:100px!important}
 .unit-eq{font-size:13px;color:var(--muted);white-space:nowrap}
 @media(max-width:520px){.unit-conversion-row{grid-template-columns:70px auto 1fr auto;gap:6px}}
 /* Supplier + Item + Product card Edit/Delete buttons — full-width row */
-.supplier-card .row-actions,.item-card .row-actions,.product-card .row-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;margin-top:12px!important;padding-top:10px!important;border-top:1px solid var(--line)!important;width:100%!important}
+.supplier-card .row-actions,.item-card .row-actions,.product-card .row-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;margin-top:auto!important;padding-top:10px!important;border-top:1px solid var(--line)!important;width:100%!important}
 .supplier-card .row-actions button,.item-card .row-actions button,.product-card .row-actions button{padding:10px 0!important;font-size:12px!important;border-radius:6px!important;text-align:center!important;width:100%!important}
 /* Item + Product card: same cream label-value style as supplier card */
 .im-party-card.item-card,.im-party-card.product-card{background:#f7f4f0!important;padding:14px 16px!important;min-height:unset!important;flex-direction:column!important;align-items:stretch!important}
@@ -92,6 +92,7 @@ table th:nth-child(1){min-width:100px!important}
 .im-party-card.production-batch-card{background:#f7f4f0!important;padding:14px 16px!important;min-height:unset!important;flex-direction:column!important;align-items:stretch!important}
 .production-batch-card .row-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;margin-top:12px!important;padding-top:10px!important;border-top:1px solid var(--line)!important;width:100%!important}
 .production-batch-card .row-actions button{padding:10px 0!important;font-size:12px!important;border-radius:6px!important;text-align:center!important;width:100%!important}
+.production-batch-card .production-summary-row span{width:auto!important;height:auto!important;border-radius:0!important;background:none!important;display:inline!important;font-weight:inherit!important;color:inherit!important}
 @media(max-width:520px){.production-draft-row{grid-template-columns:1fr auto auto;row-gap:6px}.production-draft-row>select:first-child{grid-column:1/-1}}
 /* Daily production summary panel */
 .production-summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:4px}

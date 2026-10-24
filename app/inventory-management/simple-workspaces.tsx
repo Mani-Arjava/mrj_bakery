@@ -642,11 +642,19 @@ export function ProductionWorkspace() {
       matTotals[m.itemId].qty += m.quantity;
     }
   }
-  const prodTotals: Record<string, { name: string; qty: number; unit: string }> = {};
+  const prodTotals: Record<string, { name: string; qty: number; unit: string; productId: string }> = {};
   for (const batch of dayBatches) {
     for (const p of batch.productsProduced ?? []) {
-      if (!prodTotals[p.productId]) prodTotals[p.productId] = { name: p.productName, qty: 0, unit: p.unit ?? 'Pcs' };
+      if (!prodTotals[p.productId]) prodTotals[p.productId] = { name: p.productName, qty: 0, unit: p.unit ?? 'Pcs', productId: p.productId };
       prodTotals[p.productId].qty += p.quantity;
+    }
+  }
+
+  const allProdStock: Record<string, { name: string; qty: number; unit: string; productId: string }> = {};
+  for (const batch of allProduction) {
+    for (const p of batch.productsProduced ?? []) {
+      if (!allProdStock[p.productId]) allProdStock[p.productId] = { name: p.productName, qty: 0, unit: p.unit ?? 'Pcs', productId: p.productId };
+      allProdStock[p.productId].qty += p.quantity;
     }
   }
 
@@ -759,12 +767,16 @@ export function ProductionWorkspace() {
           </div>
           <div>
             <p className="im-kicker" style={{ marginBottom: '6px' }}>Products Made</p>
-            {Object.values(prodTotals).map((p, i) => (
-              <div key={i} className="production-summary-row">
-                <span>{p.name}</span>
-                <b>{p.qty} {p.unit}</b>
-              </div>
-            ))}
+            {Object.values(prodTotals).map((p, i) => {
+              const product = data.products.find(pr => pr.id === p.productId);
+              const pieces = product?.count ? Math.round(p.qty * product.count) : null;
+              return (
+                <div key={i} className="production-summary-row">
+                  <span>{p.name}</span>
+                  <b>{p.qty.toLocaleString('en-IN', { maximumFractionDigits: 3 })} {p.unit}{pieces != null ? ` · ${pieces.toLocaleString('en-IN')} pcs` : ''}</b>
+                </div>
+              );
+            })}
             {Object.keys(prodTotals).length === 0 && <p className="im-muted" style={{ fontSize: '12px' }}>—</p>}
           </div>
         </div>
@@ -773,6 +785,22 @@ export function ProductionWorkspace() {
         {dayBatches.length} batch{dayBatches.length === 1 ? '' : 'es'} recorded on this date
       </p>
     </section>
+
+    {Object.keys(allProdStock).length > 0 && (
+      <section className="im-panel">
+        <div className="im-panel-title"><h2>Product Stock</h2></div>
+        {Object.values(allProdStock).map((p, i) => {
+          const product = data.products.find(pr => pr.id === p.productId);
+          const pieces = product?.count ? Math.round(p.qty * product.count) : null;
+          return (
+            <div key={i} className="production-summary-row">
+              <span>{p.name}</span>
+              <b>{pieces != null ? `${pieces.toLocaleString('en-IN')} pcs` : `${p.qty} ${p.unit}`}</b>
+            </div>
+          );
+        })}
+      </section>
+    )}
 
     <section className="im-panel">
       <div className="im-panel-title">
