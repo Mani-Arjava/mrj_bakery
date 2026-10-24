@@ -328,9 +328,15 @@ export function deleteProduct(productId: string) {
 
 // ========== PRODUCTION STOCK ==========
 function getProductionItemStockFromData(data: InventoryData, productionItemId: string): number {
-  return data.stockMovements
-    .filter(m => m.productionItemId === productionItemId)
-    .reduce((sum, m) => sum + (m.movementType === 'PRODUCTION' ? m.quantityPieces : -m.quantityPieces), 0);
+  const count = data.products.find(p => p.productionItemId === productionItemId)?.count ?? 1;
+  const totalProduced = data.productionBatches
+    .flatMap(b => b.productsProduced ?? [])
+    .filter(p => p.productionItemId === productionItemId)
+    .reduce((sum, p) => sum + Math.round(p.quantity * count), 0);
+  const totalSold = data.stockMovements
+    .filter(m => m.productionItemId === productionItemId && m.movementType === 'SALE')
+    .reduce((sum, m) => sum + m.quantityPieces, 0);
+  return totalProduced - totalSold;
 }
 
 export function getProductionItemStock(productionItemId: string): number {
