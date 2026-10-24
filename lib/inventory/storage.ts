@@ -23,7 +23,7 @@ export type RecipeIngredient = { itemId: string; itemName: string; quantityPerUn
 export type Recipe = { id: string; productionItemId: string; ingredients: RecipeIngredient[] };
 
 // Finished goods / packaging variants sold to customers
-export type Product = { id: string; name: string; pricePerPacketPaise: number; wholesalePricePerPacketPaise?: number; createdAt: string; productionItemId?: string; count?: number; conversionUnit?: 'KG' | 'Tray' };
+export type Product = { id: string; name: string; pricePerPacketPaise: number; wholesalePricePerPacketPaise?: number; createdAt: string; productionItemId?: string; count?: number; conversionUnit?: 'KG' | 'Tray'; piecesPerPacket?: number };
 
 export type ProductionBatchMaterial = { itemId: string; itemName: string; quantity: number; unit: string };
 export type ProductionBatchOutput = { productId: string; productName: string; quantity: number; unit: string };

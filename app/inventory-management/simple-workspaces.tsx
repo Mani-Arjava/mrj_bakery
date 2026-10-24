@@ -413,19 +413,20 @@ export function ProductsWorkspace() {
   const [mode, setMode] = useState<Mode>('cards');
   const [editing, setEditing] = useState<storage.Product | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', count: '', conversionUnit: 'KG' as 'KG' | 'Tray', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' });
+  const [form, setForm] = useState({ name: '', piecesPerPacket: '', count: '', conversionUnit: 'KG' as 'KG' | 'Tray', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' });
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!form.name) return;
     const wholesale = form.wholesalePricePerPacketPaise !== '' ? Math.round(Number(form.wholesalePricePerPacketPaise) * 100) : undefined;
     const count = form.count !== '' ? Number(form.count) : undefined;
+    const piecesPerPacket = form.piecesPerPacket !== '' ? Number(form.piecesPerPacket) : undefined;
     const productionItemId = form.productionItemId || undefined;
     run(() => {
-      if (editing) storage.updateProduct(editing.id, { name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale, count, conversionUnit: form.conversionUnit, productionItemId });
-      else storage.addProduct({ name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale, count, conversionUnit: form.conversionUnit, productionItemId });
+      if (editing) storage.updateProduct(editing.id, { name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale, count, conversionUnit: form.conversionUnit, productionItemId, piecesPerPacket });
+      else storage.addProduct({ name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale, count, conversionUnit: form.conversionUnit, productionItemId, piecesPerPacket });
     });
-    setForm({ name: '', count: '', conversionUnit: 'KG', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' });
+    setForm({ name: '', piecesPerPacket: '', count: '', conversionUnit: 'KG', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' });
     setEditing(null);
     setShowForm(false);
   }
@@ -434,6 +435,7 @@ export function ProductsWorkspace() {
     setEditing(product);
     setForm({
       name: product.name,
+      piecesPerPacket: product.piecesPerPacket != null ? String(product.piecesPerPacket) : '',
       count: product.count != null ? String(product.count) : '',
       conversionUnit: product.conversionUnit ?? 'KG',
       pricePerPacketPaise: product.pricePerPacketPaise,
@@ -452,7 +454,7 @@ export function ProductsWorkspace() {
     <Feedback notice={notice} error={error} />
     <div className="im-section-actions">
       <div><p className="im-kicker">PRODUCTS</p><h2 className="im-page-title">Manage products & pricing</h2></div>
-      <div className="action-group"><ViewToggle mode={mode} setMode={setMode} /><button className="im-primary" onClick={() => { setEditing(null); setForm({ name: '', count: '', conversionUnit: 'KG', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' }); setShowForm(true); }}>+ Add product</button></div>
+      <div className="action-group"><ViewToggle mode={mode} setMode={setMode} /><button className="im-primary" onClick={() => { setEditing(null); setForm({ name: '', piecesPerPacket: '', count: '', conversionUnit: 'KG', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' }); setShowForm(true); }}>+ Add product</button></div>
     </div>
 
     {showForm && (
@@ -460,6 +462,7 @@ export function ProductsWorkspace() {
         <h3>{editing ? 'Edit product' : 'New product'}</h3>
         <form onSubmit={handleSubmit}>
           <label>Product name<input required autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. 20-Piece Roll Cake" /></label>
+          <label>Pieces per packet<input required type="number" step="1" min="1" value={form.piecesPerPacket} onChange={(e) => setForm({ ...form, piecesPerPacket: e.target.value })} placeholder="e.g. 10" /></label>
           <div className="unit-conversion-wrap">
             <label>Unit conversion
               <div className="unit-conversion-row">
@@ -501,7 +504,7 @@ export function ProductsWorkspace() {
         <div className="im-table-scroll">
           <table>
             <thead>
-              <tr><th>Product</th><th>Conversion</th><th>Retail Price</th><th>Wholesale Price</th><th>Production Item</th><th>Actions</th></tr>
+              <tr><th>Product</th><th>Pcs/Packet</th><th>Conversion</th><th>Retail Price</th><th>Wholesale Price</th><th>Production Item</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {data.products.map((product) => {
@@ -509,6 +512,7 @@ export function ProductsWorkspace() {
                 return (
                   <tr key={product.id}>
                     <td><b>{product.name}</b></td>
+                    <td>{product.piecesPerPacket ?? '—'}</td>
                     <td>{product.count ? `1 ${product.conversionUnit ?? 'KG'} = ${product.count} pcs` : '—'}</td>
                     <td>{money(product.pricePerPacketPaise)}</td>
                     <td>{product.wholesalePricePerPacketPaise != null ? money(product.wholesalePricePerPacketPaise) : '—'}</td>
@@ -529,11 +533,16 @@ export function ProductsWorkspace() {
                 <div className="supplier-info-rows">
                   <span className="supplier-row-label">Product</span>
                   <span className="supplier-row-value">{product.name}</span>
+                  <span className="supplier-row-label">Pcs/Packet</span>
+                  <span className="supplier-row-value">{product.piecesPerPacket ?? '—'}</span>
                   <span className="supplier-row-label">Retail</span>
                   <span className="supplier-row-value">{money(product.pricePerPacketPaise)}</span>
-                  {product.wholesalePricePerPacketPaise != null && <><span className="supplier-row-label">Wholesale</span><span className="supplier-row-value">{money(product.wholesalePricePerPacketPaise)}</span></>}
-                  {product.count && <><span className="supplier-row-label">Conversion</span><span className="supplier-row-value">1 {product.conversionUnit ?? 'KG'} = {product.count} pcs</span></>}
-                  {prodItem && <><span className="supplier-row-label">Linked</span><span className="supplier-row-value">{prodItem.name}</span></>}
+                  <span className="supplier-row-label">Wholesale</span>
+                  <span className="supplier-row-value">{product.wholesalePricePerPacketPaise != null ? money(product.wholesalePricePerPacketPaise) : '—'}</span>
+                  <span className="supplier-row-label">Conversion</span>
+                  <span className="supplier-row-value">{product.count ? `1 ${product.conversionUnit ?? 'KG'} = ${product.count} pcs` : '—'}</span>
+                  <span className="supplier-row-label">Linked</span>
+                  <span className="supplier-row-value">{prodItem ? prodItem.name : '—'}</span>
                 </div>
                 <div className="row-actions"><button className="action-edit" onClick={() => editProduct(product)}>Edit</button><button className="action-delete" onClick={() => removeProduct(product)}>Delete</button></div>
               </article>
