@@ -137,6 +137,8 @@ export function getData(): InventoryData {
 
 function save(data: InventoryData) { if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
 
+export function clearAllData() { if (typeof window !== 'undefined') localStorage.removeItem(STORAGE_KEY); }
+
 // ========== SUPPLIERS ==========
 export function addSupplier(input: Omit<Supplier, 'id'>) {
   const data = getData();

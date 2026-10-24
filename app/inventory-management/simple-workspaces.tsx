@@ -554,35 +554,21 @@ export function ProductsWorkspace() {
   </>;
 }
 
-function packetBreakdown(pieces: number, piecesPerPacket: number): string {
-  const pkts = Math.floor(pieces / piecesPerPacket);
-  const rem = pieces % piecesPerPacket;
-  return rem === 0 ? `${pkts} pkts` : `${pkts} pkts · ${rem} pcs`;
-}
-
 export function ProductionWorkspace() {
   const { data, run, notice, error } = useSimpleInventory();
   const [date, setDate] = useState(today());
   const [notes, setNotes] = useState('');
   const [editingBatch, setEditingBatch] = useState<storage.ProductionBatch | null>(null);
   const [matDrafts, setMatDrafts] = useState<Array<{ itemId: string; quantity: string }>>([{ itemId: '', quantity: '' }]);
-  const [prodDrafts, setProdDrafts] = useState<Array<{ productId: string; quantity: string; unit: string }>>([{ productId: '', quantity: '', unit: 'Pcs' }]);
+  const [prodDrafts, setProdDrafts] = useState<Array<{ productId: string; quantity: string }>>([{ productId: '', quantity: '' }]);
   const [summaryDate, setSummaryDate] = useState(today());
-
-  function getProductUnit(productId: string): string {
-    const product = data.products.find(p => p.id === productId);
-    if (!product) return 'Pcs';
-    if (product.conversionUnit) return product.conversionUnit;
-    const pi = product.productionItemId ? data.productionItems.find(pi => pi.id === product.productionItemId) : undefined;
-    return pi?.productionUnit ?? 'Pcs';
-  }
 
   function resetForm() {
     setDate(today());
     setNotes('');
     setEditingBatch(null);
     setMatDrafts([{ itemId: '', quantity: '' }]);
-    setProdDrafts([{ productId: '', quantity: '', unit: 'Pcs' }]);
+    setProdDrafts([{ productId: '', quantity: '' }]);
   }
 
   function handleSubmit(e: FormEvent) {
@@ -615,7 +601,7 @@ export function ProductionWorkspace() {
       .filter(d => d.productId && Number(d.quantity) > 0)
       .map(d => {
         const product = data.products.find(p => p.id === d.productId)!;
-        return { productId: product.id, productName: product.name, quantity: Number(d.quantity), unit: d.unit };
+        return { productId: product.id, productName: product.name, quantity: Number(d.quantity), unit: 'pcs' };
       });
     const batchData = { date, rawMaterials, productsProduced, notes: notes || undefined };
     run(() => {
@@ -636,8 +622,8 @@ export function ProductionWorkspace() {
     );
     setProdDrafts(
       batch.productsProduced?.length
-        ? batch.productsProduced.map(p => ({ productId: p.productId, quantity: String(p.quantity), unit: p.unit ?? getProductUnit(p.productId) }))
-        : [{ productId: '', quantity: '', unit: 'Pcs' }]
+        ? batch.productsProduced.map(p => ({ productId: p.productId, quantity: String(p.quantity) }))
+        : [{ productId: '', quantity: '' }]
     );
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -657,18 +643,18 @@ export function ProductionWorkspace() {
       matTotals[m.itemId].qty += m.quantity;
     }
   }
-  const prodTotals: Record<string, { name: string; qty: number; unit: string; productId: string }> = {};
+  const prodTotals: Record<string, { name: string; qty: number; unit: string }> = {};
   for (const batch of dayBatches) {
     for (const p of batch.productsProduced ?? []) {
-      if (!prodTotals[p.productId]) prodTotals[p.productId] = { name: p.productName, qty: 0, unit: p.unit ?? 'Pcs', productId: p.productId };
+      if (!prodTotals[p.productId]) prodTotals[p.productId] = { name: p.productName, qty: 0, unit: p.unit ?? 'pcs' };
       prodTotals[p.productId].qty += p.quantity;
     }
   }
 
-  const allProdStock: Record<string, { name: string; qty: number; unit: string; productId: string }> = {};
+  const allProdStock: Record<string, { name: string; qty: number; unit: string }> = {};
   for (const batch of allProduction) {
     for (const p of batch.productsProduced ?? []) {
-      if (!allProdStock[p.productId]) allProdStock[p.productId] = { name: p.productName, qty: 0, unit: p.unit ?? 'Pcs', productId: p.productId };
+      if (!allProdStock[p.productId]) allProdStock[p.productId] = { name: p.productName, qty: 0, unit: p.unit ?? 'pcs' };
       allProdStock[p.productId].qty += p.quantity;
     }
   }
@@ -733,21 +719,21 @@ export function ProductionWorkspace() {
           {prodDrafts.map((draft, idx) => (
             <div key={idx} className="prod-line">
               <select value={draft.productId}
-                onChange={e => setProdDrafts(prodDrafts.map((d, i) => i === idx ? { productId: e.target.value, quantity: '', unit: getProductUnit(e.target.value) } : d))}>
+                onChange={e => setProdDrafts(prodDrafts.map((d, i) => i === idx ? { productId: e.target.value, quantity: '' } : d))}>
                 <option value="">Select product…</option>
                 {data.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              <input type="number" min="0.001" step="0.001" value={draft.quantity}
+              <input type="number" min="1" step="1" value={draft.quantity}
                 onChange={e => setProdDrafts(prodDrafts.map((d, i) => i === idx ? { ...d, quantity: e.target.value } : d))}
                 placeholder="0" />
-              <span className="prod-unit-label">{draft.unit || '—'}</span>
+              <span className="prod-unit-label">pcs</span>
               <button type="button" className="im-remove"
-                onClick={() => prodDrafts.length > 1 ? setProdDrafts(prodDrafts.filter((_, i) => i !== idx)) : setProdDrafts([{ productId: '', quantity: '', unit: 'Pcs' }])}>×</button>
+                onClick={() => prodDrafts.length > 1 ? setProdDrafts(prodDrafts.filter((_, i) => i !== idx)) : setProdDrafts([{ productId: '', quantity: '' }])}>×</button>
             </div>
           ))}
         </div>
         <div className="purchase-actions">
-          <button type="button" className="im-text-button" onClick={() => setProdDrafts([...prodDrafts, { productId: '', quantity: '', unit: 'Pcs' }])}>+ Add product</button>
+          <button type="button" className="im-text-button" onClick={() => setProdDrafts([...prodDrafts, { productId: '', quantity: '' }])}>+ Add product</button>
         </div>
 
         <label>Notes (optional)
@@ -782,20 +768,12 @@ export function ProductionWorkspace() {
           </div>
           <div>
             <p className="im-kicker" style={{ marginBottom: '6px' }}>Products Made</p>
-            {Object.values(prodTotals).map((p, i) => {
-              const product = data.products.find(pr => pr.id === p.productId);
-              const pieces = product?.count ? Math.round(p.qty * product.count) : null;
-              const pkts = pieces != null && product?.piecesPerPacket ? packetBreakdown(pieces, product.piecesPerPacket) : null;
-              return (
-                <div key={i} className="production-summary-row">
-                  <span>{p.name}</span>
-                  <div style={{ textAlign: 'right' }}>
-                    <b>{p.qty.toLocaleString('en-IN', { maximumFractionDigits: 3 })} {p.unit}{pieces != null ? ` · ${pieces.toLocaleString('en-IN')} pcs` : ''}</b>
-                    {pkts && <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>{pkts}</div>}
-                  </div>
-                </div>
-              );
-            })}
+            {Object.values(prodTotals).map((p, i) => (
+              <div key={i} className="production-summary-row">
+                <span>{p.name}</span>
+                <b>{p.qty.toLocaleString('en-IN', { maximumFractionDigits: 0 })} {p.unit}</b>
+              </div>
+            ))}
             {Object.keys(prodTotals).length === 0 && <p className="im-muted" style={{ fontSize: '12px' }}>—</p>}
           </div>
         </div>
@@ -808,20 +786,12 @@ export function ProductionWorkspace() {
     {Object.keys(allProdStock).length > 0 && (
       <section className="im-panel">
         <div className="im-panel-title"><h2>Product Stock</h2></div>
-        {Object.values(allProdStock).map((p, i) => {
-          const product = data.products.find(pr => pr.id === p.productId);
-          const pieces = product?.count ? Math.round(p.qty * product.count) : null;
-          const pkts = pieces != null && product?.piecesPerPacket ? packetBreakdown(pieces, product.piecesPerPacket) : null;
-          return (
-            <div key={i} className="production-summary-row">
-              <span>{p.name}</span>
-              <div style={{ textAlign: 'right' }}>
-                <b>{pieces != null ? `${pieces.toLocaleString('en-IN')} pcs` : `${p.qty} ${p.unit}`}</b>
-                {pkts && <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>{pkts}</div>}
-              </div>
-            </div>
-          );
-        })}
+        {Object.values(allProdStock).map((p, i) => (
+          <div key={i} className="production-summary-row">
+            <span>{p.name}</span>
+            <b>{p.qty.toLocaleString('en-IN', { maximumFractionDigits: 0 })} {p.unit}</b>
+          </div>
+        ))}
       </section>
     )}
 
