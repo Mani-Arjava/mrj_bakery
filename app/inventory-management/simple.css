@@ -119,3 +119,5 @@ table th:nth-child(1){min-width:100px!important}
 .prod-line input[type="number"]{text-align:center}
 .prod-unit-label{font-size:12px;font-weight:600;color:var(--ink);text-align:center}
 @media(max-width:520px){.prod-line-head{display:none}.prod-line{grid-template-columns:1fr 80px 50px 32px;gap:8px;padding:8px 4px}}
+/* Production page — clear spacing between all panels */
+.im-workspace .im-panel{margin-bottom:16px}

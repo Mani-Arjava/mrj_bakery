@@ -776,44 +776,48 @@ export function ProductionWorkspace() {
 
     <section className="im-panel">
       <div className="im-panel-title">
-        <h2>Production history</h2>
-        <span>{allProduction.length} record{allProduction.length === 1 ? '' : 's'}</span>
+        <h2>Production records</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <input type="date" value={summaryDate} onChange={e => setSummaryDate(e.target.value)}
+            style={{ border: '1px solid var(--line)', borderRadius: '6px', padding: '6px 10px', fontSize: '13px', background: '#fcfdfb', fontFamily: 'inherit' }} />
+          {allProduction.length > 0 && (
+            <button className="action-delete" style={{ fontSize: '11px', padding: '6px 12px' }}
+              onClick={() => { if (window.confirm('Delete ALL production records? This cannot be undone.')) run(() => storage.clearProductionHistory()); }}>
+              Clear all
+            </button>
+          )}
+        </div>
       </div>
-      {allProduction.length === 0 ? (
-        <Empty title="No production recorded yet" text="Production records will appear here once you start saving." />
+      {dayBatches.length === 0 ? (
+        <Empty title="No records for this date" text="Select a date above to view production records for that day." />
       ) : (
         <div className="im-party-grid">
-          {allProduction.map((batch) => (
+          {dayBatches.map((batch) => (
             <article className="im-party-card production-batch-card" key={batch.id}>
-              <div className="supplier-info-rows">
-                <span className="supplier-row-label">Date</span>
-                <span className="supplier-row-value">{batch.date}</span>
-                {batch.notes && <><span className="supplier-row-label">Notes</span><span className="supplier-row-value">{batch.notes}</span></>}
-              </div>
+              {batch.notes && (
+                <div className="supplier-info-rows" style={{ marginBottom: '10px' }}>
+                  <span className="supplier-row-label">Notes</span>
+                  <span className="supplier-row-value">{batch.notes}</span>
+                </div>
+              )}
               {(batch.rawMaterials?.length ?? 0) > 0 && (
-                <div style={{ marginTop: '10px' }}>
+                <div style={{ marginBottom: '8px' }}>
                   <p className="im-kicker" style={{ marginBottom: '4px' }}>Raw Materials Used</p>
                   {batch.rawMaterials!.map((m, i) => (
-                    <div key={i} style={{ fontSize: '12px', color: 'var(--ink)', padding: '2px 0' }}>
-                      {m.itemName}: <b>{m.quantity} {m.unit}</b>
+                    <div key={i} className="production-summary-row">
+                      <span>{m.itemName}</span>
+                      <b>{m.quantity} {m.unit}</b>
                     </div>
                   ))}
                 </div>
               )}
-              {!batch.rawMaterials?.length && batch.productionItemName && (
-                <div style={{ marginTop: '10px' }}>
-                  <p className="im-kicker" style={{ marginBottom: '4px' }}>Production (legacy)</p>
-                  <div style={{ fontSize: '12px', color: 'var(--ink)' }}>
-                    {batch.productionItemName}: <b>{batch.productionQuantity} {batch.productionUnit}</b> → {batch.piecesProduced} pcs
-                  </div>
-                </div>
-              )}
               {(batch.productsProduced?.length ?? 0) > 0 && (
-                <div style={{ marginTop: '8px' }}>
+                <div style={{ marginBottom: '8px' }}>
                   <p className="im-kicker" style={{ marginBottom: '4px' }}>Products Made</p>
                   {batch.productsProduced!.map((p, i) => (
-                    <div key={i} style={{ fontSize: '12px', color: 'var(--ink)', padding: '2px 0' }}>
-                      {p.productName}: <b>{p.quantity} {p.unit ?? 'Pcs'}</b>
+                    <div key={i} className="production-summary-row">
+                      <span>{p.productName}</span>
+                      <b>{p.quantity} {p.unit ?? 'Pcs'}</b>
                     </div>
                   ))}
                 </div>

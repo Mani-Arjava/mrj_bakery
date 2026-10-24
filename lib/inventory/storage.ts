@@ -397,6 +397,13 @@ export function deleteProductionBatch(batchId: string) {
   save(data);
 }
 
+export function clearProductionHistory() {
+  const data = getData();
+  data.productionBatches = [];
+  data.stockMovements = data.stockMovements.filter(m => m.movementType !== 'PRODUCTION');
+  save(data);
+}
+
 // ========== CUSTOMERS ==========
 export function addCustomer(input: Omit<Customer, 'id' | 'outstandingPaise' | 'advancePaise'> & { previousBalancePaise?: number }) {
   const data = getData();
