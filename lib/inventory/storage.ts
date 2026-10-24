@@ -346,6 +346,16 @@ export function getProductStock(productId: string): number {
 }
 
 // ========== PRODUCTION ==========
+function applyProductionStockMovements(data: InventoryData, batchId: string, batchDate: string, productsProduced: ProductionBatchOutput[]) {
+  for (const produced of productsProduced) {
+    const count = data.products.find(p => p.productionItemId === produced.productionItemId)?.count ?? 1;
+    const piecesProduced = Math.round(produced.quantity * count);
+    if (piecesProduced > 0) {
+      data.stockMovements.push({ id: id(), date: batchDate, productionItemId: produced.productionItemId, quantityPieces: piecesProduced, movementType: 'PRODUCTION', sourceId: batchId });
+    }
+  }
+}
+
 function applyRecipeEffect(data: InventoryData, productionItemId: string, productionQuantity: number, direction: 1 | -1) {
   const recipe = data.recipes.find(r => r.productionItemId === productionItemId);
   if (!recipe) return;
@@ -367,6 +377,7 @@ export function addProductionBatch(input: Omit<ProductionBatch, 'id'>) {
   const batch: ProductionBatch = { id: id(), ...input };
   data.productionBatches.push(batch);
   if (input.rawMaterials?.length) applyMaterialEffect(data, input.rawMaterials, -1);
+  if (input.productsProduced?.length) applyProductionStockMovements(data, batch.id, batch.date, input.productsProduced);
   save(data);
   return batch;
 }
@@ -388,6 +399,7 @@ export function updateProductionBatch(batchId: string, input: Omit<ProductionBat
   data.stockMovements = data.stockMovements.filter(m => m.sourceId !== batchId);
   Object.assign(batch, input);
   if (input.rawMaterials?.length) applyMaterialEffect(data, input.rawMaterials, -1);
+  if (input.productsProduced?.length) applyProductionStockMovements(data, batchId, input.date, input.productsProduced);
   save(data);
 }
 
@@ -450,7 +462,7 @@ export function postSale(input: Omit<SaleInvoice, 'id'>) {
     const product = data.products.find(p => p.id === line.productId);
     if (product?.productionItemId) {
       neededByProductionItem[product.productionItemId] =
-        (neededByProductionItem[product.productionItemId] ?? 0) + line.quantityPackets * (product.count ?? 1);
+        (neededByProductionItem[product.productionItemId] ?? 0) + line.quantityPackets * (product.piecesPerPacket ?? 1);
     }
   }
   for (const [piId, needed] of Object.entries(neededByProductionItem)) {
@@ -468,7 +480,7 @@ export function postSale(input: Omit<SaleInvoice, 'id'>) {
   for (const line of input.lines) {
     const product = data.products.find(p => p.id === line.productId);
     if (product?.productionItemId) {
-      const quantityPieces = line.quantityPackets * (product.count ?? 1);
+      const quantityPieces = line.quantityPackets * (product.piecesPerPacket ?? 1);
       const movement: StockMovement = { id: id(), date: input.date, productionItemId: product.productionItemId, quantityPieces, movementType: 'SALE', sourceId: invoice.id };
       data.stockMovements.push(movement);
     }

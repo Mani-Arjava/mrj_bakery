@@ -678,13 +678,9 @@ export function ProductionWorkspace() {
     }
   }
 
-  const allProdStock: Record<string, { name: string; qty: number; unit: string; count?: number }> = {};
-  for (const batch of allProduction) {
-    for (const p of batch.productsProduced ?? []) {
-      if (!allProdStock[p.productionItemId]) allProdStock[p.productionItemId] = { name: p.productionItemName, qty: 0, unit: p.unit ?? 'KG', count: data.products.find(pr => pr.productionItemId === p.productionItemId)?.count };
-      allProdStock[p.productionItemId].qty += p.quantity;
-    }
-  }
+  const availableStock = data.productionItems
+    .map(pi => ({ id: pi.id, name: pi.name, pcs: storage.getProductionItemStock(pi.id) }))
+    .filter(pi => pi.pcs > 0);
 
   return <>
     <Feedback notice={notice} error={error} />
@@ -852,13 +848,13 @@ export function ProductionWorkspace() {
       </p>
     </section>
 
-    {Object.keys(allProdStock).length > 0 && (
+    {availableStock.length > 0 && (
       <section className="im-panel">
         <div className="im-panel-title"><h2>Product Stock</h2></div>
-        {Object.values(allProdStock).map((p, i) => (
+        {availableStock.map((pi, i) => (
           <div key={i} className="production-summary-row">
-            <span>{p.name}</span>
-            <b>{p.qty.toLocaleString('en-IN', { maximumFractionDigits: 2 })} {p.unit}{p.count ? ` · ${Math.round(p.qty * p.count).toLocaleString('en-IN')} pcs` : ''}</b>
+            <span>{pi.name}</span>
+            <b>{pi.pcs.toLocaleString('en-IN')} pcs</b>
           </div>
         ))}
       </section>
@@ -988,10 +984,6 @@ export function BillingWorkspace() {
         return { productId: line.productId, productName: product.name, quantityPackets: line.quantity, pricePerPacketPaise: line.pricePerPacketPaise, totalPaise: line.quantity * line.pricePerPacketPaise };
       });
       const invoice = storage.postSale({ date, customerId, customerName: selected.name, lines: saleLines, totalPaise, paidPaise: paid, outstandingPaise });
-
-      const balance = storage.getCustomerBalance(customerId);
-      storage.updateCustomer(customerId, { outstandingPaise: balance.outstandingPaise + outstandingPaise, advancePaise: balance.advancePaise });
-
       setLastInvoice({ ...invoice, customerName: selected.name });
     });
 
