@@ -716,12 +716,17 @@ export type PLDaySummary = {
 
 function getItemLatestRatePaise(data: InventoryData, itemId: string): number {
   let latestDate = '';
-  let latestRate = 0;
   for (const p of data.purchases ?? []) {
-    const line = p.lines.find(l => l.itemId === itemId);
-    if (line && p.date >= latestDate) { latestDate = p.date; latestRate = line.unitPricePaise; }
+    if (p.lines.some(l => l.itemId === itemId) && p.date > latestDate) latestDate = p.date;
   }
-  return latestRate;
+  if (!latestDate) return 0;
+  let totalQty = 0, totalCost = 0;
+  for (const p of data.purchases ?? []) {
+    if (p.date !== latestDate) continue;
+    const line = p.lines.find(l => l.itemId === itemId);
+    if (line) { totalQty += line.quantity; totalCost += line.totalPaise; }
+  }
+  return totalQty > 0 ? Math.round(totalCost / totalQty) : 0;
 }
 
 export function getPLSummary(date: string): PLDaySummary {
