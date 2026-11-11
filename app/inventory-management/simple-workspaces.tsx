@@ -1286,8 +1286,13 @@ export function EmployeesWorkspace() {
   const [form, setForm] = useState({ name: '', phone: '', openingAdvance: '', openingDue: '' });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [employees, setEmployees] = useState<storage.Employee[]>([]);
+  const [salaryHistory, setSalaryHistory] = useState<ReturnType<typeof storage.getEmployeeSalaryHistory>>(null);
 
   useEffect(() => { setEmployees(storage.getAllEmployees()); }, [notice, error]);
+  useEffect(() => {
+    if (selectedId) setSalaryHistory(storage.getEmployeeSalaryHistory(selectedId));
+    else setSalaryHistory(null);
+  }, [selectedId, notice, error]);
 
   const selected = selectedId ? employees.find(e => e.id === selectedId) : null;
 
@@ -1302,8 +1307,8 @@ export function EmployeesWorkspace() {
     setForm({
       name: emp.name,
       phone: emp.phone,
-      openingAdvance: emp.advancePaise ? String(emp.advancePaise / 100) : '',
-      openingDue: emp.duePaise ? String(emp.duePaise / 100) : '',
+      openingAdvance: emp.openingAdvancePaise ? String(emp.openingAdvancePaise / 100) : '',
+      openingDue: emp.openingDuePaise ? String(emp.openingDuePaise / 100) : '',
     });
     setShowForm(true);
     setSelectedId(null);
@@ -1316,9 +1321,9 @@ export function EmployeesWorkspace() {
     const openingDuePaise = form.openingDue !== '' ? Math.round(Number(form.openingDue) * 100) : undefined;
     run(() => {
       if (editingEmployee) {
-        storage.updateEmployee(editingEmployee.id, { name: form.name.trim(), phone: form.phone, advancePaise: openingAdvancePaise ?? editingEmployee.advancePaise, duePaise: openingDuePaise ?? editingEmployee.duePaise });
+        storage.updateEmployee(editingEmployee.id, { name: form.name.trim(), phone: form.phone, openingAdvancePaise: openingAdvancePaise ?? editingEmployee.openingAdvancePaise, openingDuePaise: openingDuePaise ?? editingEmployee.openingDuePaise });
       } else {
-        storage.addEmployee({ name: form.name.trim(), phone: form.phone, openingAdvancePaise, openingDuePaise });
+        storage.addEmployee({ name: form.name.trim(), phone: form.phone, openingAdvancePaise: openingAdvancePaise ?? 0, openingDuePaise: openingDuePaise ?? 0 });
       }
     });
     setShowForm(false);
@@ -1377,6 +1382,54 @@ export function EmployeesWorkspace() {
           <button className="action-edit" onClick={() => openEdit(selected)}>Edit</button>
           <button className="action-delete" onClick={() => handleDelete(selected)}>Delete</button>
         </div>
+
+        {salaryHistory && (
+          <div style={{ marginTop: '24px' }}>
+            <div className="im-panel-title">
+              <h2>Salary history</h2>
+              <span>{salaryHistory.entries.length} records</span>
+            </div>
+            {salaryHistory.entries.length === 0 ? (
+              <div className="im-empty">
+                <b>No salary transactions yet</b>
+                <p>Salary expenses recorded for this employee will appear here.</p>
+              </div>
+            ) : (
+              <div className="im-table-scroll">
+                {(() => {
+                  const fmtBalance = (n: number) =>
+                    n > 0 ? <span className="credit">{money(n)} Adv.</span>
+                    : n < 0 ? <span className="due">{money(-n)} Due</span>
+                    : <span style={{ color: 'var(--muted)' }}>Settled</span>;
+                  return (
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Date</th><th>Actual</th><th>Given</th><th>Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td><em style={{ color: 'var(--muted)', fontStyle: 'italic' }}>Opening</em></td>
+                          <td>—</td><td>—</td>
+                          <td>{fmtBalance(salaryHistory.openingBalancePaise)}</td>
+                        </tr>
+                        {salaryHistory.entries.map(entry => (
+                          <tr key={entry.expense.id}>
+                            <td>{entry.expense.date}</td>
+                            <td>{money(entry.expense.actualAmountPaise ?? entry.expense.amountPaise)}</td>
+                            <td>{money(entry.expense.amountPaise)}</td>
+                            <td><strong>{fmtBalance(entry.runningBalancePaise)}</strong></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+        )}
       </section>
     ) : employees.length === 0 ? (
       <Empty title="No employees yet" text="Add employees to track their salary and advance." action="Add employee" onAction={openAdd} />

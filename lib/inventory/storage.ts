@@ -36,7 +36,7 @@ export type ProductionBatch = {
   notes?: string;
 };
 export type Customer = { id: string; name: string; phone: string; type: 'wholesaler' | 'retailer'; outstandingPaise: number; advancePaise: number };
-export type Employee = { id: string; name: string; phone: string; advancePaise: number; duePaise: number };
+export type Employee = { id: string; name: string; phone: string; advancePaise: number; duePaise: number; openingAdvancePaise: number; openingDuePaise: number };
 export type SaleLine = { productId: string; productName: string; quantityPackets: number; pricePerPacketPaise: number; totalPaise: number };
 export type SaleInvoice = { id: string; date: string; customerId: string; customerName: string; lines: SaleLine[]; totalPaise: number; paidPaise: number; outstandingPaise: number; previousOutstandingPaise?: number; previousAdvancePaise?: number };
 export type StockMovement = { id: string; date: string; productionItemId: string; quantityPieces: number; movementType: 'PRODUCTION' | 'SALE'; sourceId: string };
@@ -145,7 +145,17 @@ export function getData(): InventoryData {
       recipes: Array.isArray(parsed.recipes) ? parsed.recipes : [],
       productionBatches: Array.isArray(parsed.productionBatches) ? parsed.productionBatches : [],
       customers: Array.isArray(parsed.customers) ? parsed.customers.map((c: any) => ({ ...c, type: c.type ?? 'retailer' })) : [],
-      employees: Array.isArray(parsed.employees) ? parsed.employees : [],
+      employees: Array.isArray(parsed.employees) ? parsed.employees.map((e: any) => {
+        const openingNet = (e.openingAdvancePaise ?? 0) - (e.openingDuePaise ?? 0);
+        const runningNet = (e.advancePaise ?? 0) - (e.duePaise ?? 0);
+        return {
+          id: e.id, name: e.name, phone: e.phone || '',
+          advancePaise: runningNet > 0 ? runningNet : 0,
+          duePaise: runningNet < 0 ? -runningNet : 0,
+          openingAdvancePaise: openingNet > 0 ? openingNet : 0,
+          openingDuePaise: openingNet < 0 ? -openingNet : 0,
+        };
+      }) : [],
       saleInvoices: Array.isArray(parsed.saleInvoices) ? parsed.saleInvoices : [],
       stockMovements: Array.isArray(parsed.stockMovements) ? parsed.stockMovements : [],
       expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
@@ -536,10 +546,26 @@ export function addEmployee(input: Omit<Employee, 'id' | 'advancePaise' | 'duePa
   const data = getData();
   if (!data.employees) data.employees = [];
   const { openingAdvancePaise, openingDuePaise, ...rest } = input;
-  const employee: Employee = { id: id(), ...rest, advancePaise: openingAdvancePaise ?? 0, duePaise: openingDuePaise ?? 0 };
+  const openingNet = (openingAdvancePaise ?? 0) - (openingDuePaise ?? 0);
+  const employee: Employee = {
+    id: id(), ...rest,
+    advancePaise: openingNet > 0 ? openingNet : 0,
+    duePaise: openingNet < 0 ? -openingNet : 0,
+    openingAdvancePaise: openingNet > 0 ? openingNet : 0,
+    openingDuePaise: openingNet < 0 ? -openingNet : 0,
+  };
   data.employees.push(employee);
   save(data);
   return employee;
+}
+
+function computeEmployeeExpenseEffects(data: InventoryData, employeeId: string) {
+  let netPaise = 0;
+  for (const exp of data.expenses ?? []) {
+    if (exp.category !== 'salary' || exp.employeeId !== employeeId || exp.actualAmountPaise === undefined) continue;
+    netPaise += exp.amountPaise - exp.actualAmountPaise;
+  }
+  return { netPaise };
 }
 
 export function updateEmployee(employeeId: string, updates: Partial<Omit<Employee, 'id'>>) {
@@ -547,6 +573,19 @@ export function updateEmployee(employeeId: string, updates: Partial<Omit<Employe
   if (!data.employees) data.employees = [];
   const employee = data.employees.find(e => e.id === employeeId);
   if (!employee) throw new Error('Employee not found.');
+  if (updates.openingAdvancePaise !== undefined || updates.openingDuePaise !== undefined) {
+    const { netPaise } = computeEmployeeExpenseEffects(data, employeeId);
+    const openingNet = (updates.openingAdvancePaise ?? employee.openingAdvancePaise)
+                     - (updates.openingDuePaise ?? employee.openingDuePaise);
+    const totalNet = openingNet + netPaise;
+    updates = {
+      ...updates,
+      openingAdvancePaise: openingNet > 0 ? openingNet : 0,
+      openingDuePaise: openingNet < 0 ? -openingNet : 0,
+      advancePaise: totalNet > 0 ? totalNet : 0,
+      duePaise: totalNet < 0 ? -totalNet : 0,
+    };
+  }
   Object.assign(employee, updates);
   save(data);
 }
@@ -569,9 +608,9 @@ function applyExpenseEffect(data: InventoryData, expense: Expense, reverse = fal
   const emp = data.employees.find(e => e.id === expense.employeeId);
   if (!emp) return;
   const diff = expense.amountPaise - expense.actualAmountPaise;
-  const sign = reverse ? -1 : 1;
-  if (diff > 0) emp.advancePaise = Math.max(0, emp.advancePaise + sign * diff);
-  else if (diff < 0) emp.duePaise = Math.max(0, emp.duePaise + sign * (-diff));
+  const net = emp.advancePaise - emp.duePaise + (reverse ? -1 : 1) * diff;
+  emp.advancePaise = net > 0 ? net : 0;
+  emp.duePaise = net < 0 ? -net : 0;
 }
 
 export function addExpense(input: Omit<Expense, 'id'>): Expense {
@@ -613,4 +652,26 @@ export function getExpensesByDate(date: string): Expense[] {
 export function getAllExpenses(): Expense[] {
   const data = getData();
   return data.expenses ?? [];
+}
+
+export function getEmployeeSalaryHistory(employeeId: string) {
+  const data = getData();
+  const emp = data.employees.find(e => e.id === employeeId);
+  if (!emp) return null;
+  const openingBalancePaise = emp.openingAdvancePaise - emp.openingDuePaise; // positive = advance, negative = due
+  type Entry = { expense: Expense; changePaise: number; runningBalancePaise: number };
+  const acc = (data.expenses ?? [])
+    .filter(e => e.category === 'salary' && e.employeeId === employeeId)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
+    .reduce<{ list: Entry[]; balance: number }>(
+      (state, exp) => {
+        const diff = exp.amountPaise - (exp.actualAmountPaise ?? exp.amountPaise);
+        const balance = state.balance + diff;
+        state.list.push({ expense: exp, changePaise: diff, runningBalancePaise: balance });
+        state.balance = balance;
+        return state;
+      },
+      { list: [], balance: openingBalancePaise }
+    );
+  return { openingBalancePaise, entries: acc.list, currentBalancePaise: emp.advancePaise - emp.duePaise };
 }
