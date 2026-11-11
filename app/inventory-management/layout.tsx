@@ -52,7 +52,8 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
     { href: '/inventory-management/production', label: 'Production' },
     { href: '/inventory-management/customers', label: 'Customers' },
     { href: '/inventory-management/employees', label: 'Employees' },
-    { href: '/inventory-management/billing', label: 'Billing' }
+    { href: '/inventory-management/billing', label: 'Billing' },
+    { href: '/inventory-management/expenses', label: 'Expenses' }
   ];
 
   const currentView = navigation.find(n => pathname === n.href)?.label || 'Dashboard';

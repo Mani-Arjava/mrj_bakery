@@ -36,10 +36,23 @@ export type ProductionBatch = {
   notes?: string;
 };
 export type Customer = { id: string; name: string; phone: string; type: 'wholesaler' | 'retailer'; outstandingPaise: number; advancePaise: number };
-export type Employee = { id: string; name: string; phone: string; daySalaryPaise: number; advancePaise: number; duePaise: number };
+export type Employee = { id: string; name: string; phone: string; advancePaise: number; duePaise: number };
 export type SaleLine = { productId: string; productName: string; quantityPackets: number; pricePerPacketPaise: number; totalPaise: number };
 export type SaleInvoice = { id: string; date: string; customerId: string; customerName: string; lines: SaleLine[]; totalPaise: number; paidPaise: number; outstandingPaise: number; previousOutstandingPaise?: number; previousAdvancePaise?: number };
 export type StockMovement = { id: string; date: string; productionItemId: string; quantityPieces: number; movementType: 'PRODUCTION' | 'SALE'; sourceId: string };
+
+export type ExpenseCategory = 'salary' | 'petrol' | 'courier' | 'cover-packing' | 'tea' | 'other';
+export type Expense = {
+  id: string;
+  date: string;
+  category: ExpenseCategory;
+  amountPaise: number;
+  employeeId?: string;
+  employeeName?: string;
+  actualAmountPaise?: number;
+  customName?: string;
+  note?: string;
+};
 
 export type InventoryData = {
   suppliers: Supplier[];
@@ -53,9 +66,10 @@ export type InventoryData = {
   employees: Employee[];
   saleInvoices: SaleInvoice[];
   stockMovements: StockMovement[];
+  expenses: Expense[];
 };
 
-const emptyData = (): InventoryData => ({ suppliers: [], items: [], purchases: [], products: [], productionItems: [], recipes: [], productionBatches: [], customers: [], employees: [], saleInvoices: [], stockMovements: [] });
+const emptyData = (): InventoryData => ({ suppliers: [], items: [], purchases: [], products: [], productionItems: [], recipes: [], productionBatches: [], customers: [], employees: [], saleInvoices: [], stockMovements: [], expenses: [] });
 function id() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`; }
 
 function migrateV1toV2(v1: any): InventoryData {
@@ -134,6 +148,7 @@ export function getData(): InventoryData {
       employees: Array.isArray(parsed.employees) ? parsed.employees : [],
       saleInvoices: Array.isArray(parsed.saleInvoices) ? parsed.saleInvoices : [],
       stockMovements: Array.isArray(parsed.stockMovements) ? parsed.stockMovements : [],
+      expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
     };
   } catch { return emptyData(); }
 }
@@ -546,4 +561,56 @@ export function deleteEmployee(employeeId: string) {
 export function getAllEmployees(): Employee[] {
   const data = getData();
   return data.employees ?? [];
+}
+
+// ========== EXPENSES ==========
+function applyExpenseEffect(data: InventoryData, expense: Expense, reverse = false) {
+  if (expense.category !== 'salary' || !expense.employeeId || expense.actualAmountPaise === undefined) return;
+  const emp = data.employees.find(e => e.id === expense.employeeId);
+  if (!emp) return;
+  const diff = expense.amountPaise - expense.actualAmountPaise;
+  const sign = reverse ? -1 : 1;
+  if (diff > 0) emp.advancePaise = Math.max(0, emp.advancePaise + sign * diff);
+  else if (diff < 0) emp.duePaise = Math.max(0, emp.duePaise + sign * (-diff));
+}
+
+export function addExpense(input: Omit<Expense, 'id'>): Expense {
+  const data = getData();
+  if (!data.expenses) data.expenses = [];
+  const expense: Expense = { id: id(), ...input };
+  data.expenses.push(expense);
+  applyExpenseEffect(data, expense);
+  save(data);
+  return expense;
+}
+
+export function updateExpense(expenseId: string, updates: Omit<Expense, 'id'>) {
+  const data = getData();
+  if (!data.expenses) data.expenses = [];
+  const idx = data.expenses.findIndex(e => e.id === expenseId);
+  if (idx === -1) throw new Error('Expense not found.');
+  applyExpenseEffect(data, data.expenses[idx], true);
+  data.expenses[idx] = { id: expenseId, ...updates };
+  applyExpenseEffect(data, data.expenses[idx]);
+  save(data);
+}
+
+export function deleteExpense(expenseId: string) {
+  const data = getData();
+  if (!data.expenses) data.expenses = [];
+  const expense = data.expenses.find(e => e.id === expenseId);
+  if (!expense) throw new Error('Expense not found.');
+  applyExpenseEffect(data, expense, true);
+  data.expenses = data.expenses.filter(e => e.id !== expenseId);
+  save(data);
+}
+
+export function getExpensesByDate(date: string): Expense[] {
+  const data = getData();
+  return (data.expenses ?? []).filter(e => e.date === date).sort((a, b) => b.id.localeCompare(a.id));
+}
+
+export function getAllExpenses(): Expense[] {
+  const data = getData();
+  return data.expenses ?? [];
 }

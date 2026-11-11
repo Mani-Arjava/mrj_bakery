@@ -11,7 +11,7 @@ const money = (paise: number) => new Intl.NumberFormat('en-IN', { style: 'curren
 type Mode = 'cards' | 'table';
 
 export function useSimpleInventory() {
-  const [data, setData] = useState<storage.InventoryData>({ suppliers: [], items: [], purchases: [], products: [], productionItems: [], recipes: [], productionBatches: [], customers: [], employees: [], saleInvoices: [], stockMovements: [] });
+  const [data, setData] = useState<storage.InventoryData>({ suppliers: [], items: [], purchases: [], products: [], productionItems: [], recipes: [], productionBatches: [], customers: [], employees: [], saleInvoices: [], stockMovements: [], expenses: [] });
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const refresh = () => setData(storage.getData());
@@ -23,7 +23,7 @@ export function useSimpleInventory() {
   return { data, run, refresh, notice, error };
 }
 
-function Feedback({ notice, error }: { notice: string; error: string }) {
+export function Feedback({ notice, error }: { notice: string; error: string }) {
   return <>{notice && <div className="im-notice">{notice}</div>}{error && <div className="im-error im-banner">{error}</div>}</>;
 }
 
@@ -1283,7 +1283,7 @@ export function EmployeesWorkspace() {
   const [mode, setMode] = useState<Mode>('cards');
   const [showForm, setShowForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<storage.Employee | null>(null);
-  const [form, setForm] = useState({ name: '', phone: '', daySalary: '', openingAdvance: '', openingDue: '' });
+  const [form, setForm] = useState({ name: '', phone: '', openingAdvance: '', openingDue: '' });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [employees, setEmployees] = useState<storage.Employee[]>([]);
 
@@ -1293,7 +1293,7 @@ export function EmployeesWorkspace() {
 
   function openAdd() {
     setEditingEmployee(null);
-    setForm({ name: '', phone: '', daySalary: '', openingAdvance: '', openingDue: '' });
+    setForm({ name: '', phone: '', openingAdvance: '', openingDue: '' });
     setShowForm(true);
   }
 
@@ -1302,7 +1302,6 @@ export function EmployeesWorkspace() {
     setForm({
       name: emp.name,
       phone: emp.phone,
-      daySalary: String(emp.daySalaryPaise / 100),
       openingAdvance: emp.advancePaise ? String(emp.advancePaise / 100) : '',
       openingDue: emp.duePaise ? String(emp.duePaise / 100) : '',
     });
@@ -1313,19 +1312,18 @@ export function EmployeesWorkspace() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) return;
-    const daySalaryPaise = Math.round(Number(form.daySalary) * 100);
     const openingAdvancePaise = form.openingAdvance !== '' ? Math.round(Number(form.openingAdvance) * 100) : undefined;
     const openingDuePaise = form.openingDue !== '' ? Math.round(Number(form.openingDue) * 100) : undefined;
     run(() => {
       if (editingEmployee) {
-        storage.updateEmployee(editingEmployee.id, { name: form.name.trim(), phone: form.phone, daySalaryPaise, advancePaise: openingAdvancePaise ?? editingEmployee.advancePaise, duePaise: openingDuePaise ?? editingEmployee.duePaise });
+        storage.updateEmployee(editingEmployee.id, { name: form.name.trim(), phone: form.phone, advancePaise: openingAdvancePaise ?? editingEmployee.advancePaise, duePaise: openingDuePaise ?? editingEmployee.duePaise });
       } else {
-        storage.addEmployee({ name: form.name.trim(), phone: form.phone, daySalaryPaise, openingAdvancePaise, openingDuePaise });
+        storage.addEmployee({ name: form.name.trim(), phone: form.phone, openingAdvancePaise, openingDuePaise });
       }
     });
     setShowForm(false);
     setEditingEmployee(null);
-    setForm({ name: '', phone: '', daySalary: '', openingAdvance: '', openingDue: '' });
+    setForm({ name: '', phone: '', openingAdvance: '', openingDue: '' });
   }
 
   function handleDelete(emp: storage.Employee) {
@@ -1348,7 +1346,6 @@ export function EmployeesWorkspace() {
         <form onSubmit={handleSubmit}>
           <label>Name<input required autoFocus value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></label>
           <label>Phone<input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></label>
-          <label>Day salary (₹)<input required type="number" min="0" step="0.01" value={form.daySalary} onChange={e => setForm({ ...form, daySalary: e.target.value })} placeholder="0" /></label>
           <label>Opening advance (₹) <span style={{ fontWeight: 400, color: 'var(--muted)' }}>optional</span><input type="number" min="0" step="0.01" value={form.openingAdvance} onChange={e => setForm({ ...form, openingAdvance: e.target.value })} placeholder="0" /></label>
           <label>Opening due (₹) <span style={{ fontWeight: 400, color: 'var(--muted)' }}>optional — salary owed to employee</span><input type="number" min="0" step="0.01" value={form.openingDue} onChange={e => setForm({ ...form, openingDue: e.target.value })} placeholder="0" /></label>
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -1365,7 +1362,6 @@ export function EmployeesWorkspace() {
           <h2 style={{ margin: 0 }}>{selected.name}</h2>
         </div>
         <p style={{ color: 'var(--muted)' }}>{selected.phone || 'No phone'}</p>
-        <p style={{ color: 'var(--muted)', marginTop: 0 }}>Day salary: <b>{money(selected.daySalaryPaise)}</b></p>
         <div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}>
           <div style={{ flex: 1, padding: '12px', background: selected.advancePaise > 0 ? '#e3f2fd' : '#f5f5f5', borderRadius: '4px' }}>
             <small>Advance given</small>
@@ -1392,7 +1388,6 @@ export function EmployeesWorkspace() {
               <div className="supplier-info-rows">
                 <span className="supplier-row-label">Name</span><span className="supplier-row-value">{emp.name}</span>
                 {emp.phone && <><span className="supplier-row-label">Phone</span><span className="supplier-row-value">{emp.phone}</span></>}
-                <span className="supplier-row-label">Day salary</span><span className="supplier-row-value">{money(emp.daySalaryPaise)}</span>
                 <span className="supplier-row-label">Balance</span><span className="supplier-row-value">
                   {emp.advancePaise > 0 ? <span style={{ color: '#0d47a1' }}>{money(emp.advancePaise)} adv</span>
                     : emp.duePaise > 0 ? <span style={{ color: '#e65100' }}>{money(emp.duePaise)} due</span>
@@ -1407,13 +1402,12 @@ export function EmployeesWorkspace() {
     ) : (
       <section className="im-panel im-table-scroll">
         <table>
-          <thead><tr><th>Name</th><th>Phone</th><th>Day Salary</th><th>Balance</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Name</th><th>Phone</th><th>Balance</th><th>Actions</th></tr></thead>
           <tbody>
             {employees.map(emp => (
               <tr key={emp.id}>
                 <td><button className="table-link" onClick={() => setSelectedId(emp.id)}>{emp.name}</button></td>
                 <td>{emp.phone || '—'}</td>
-                <td>{money(emp.daySalaryPaise)}</td>
                 <td>
                   {emp.advancePaise > 0 ? <span style={{ color: '#0d47a1' }}>{money(emp.advancePaise)} adv</span>
                     : emp.duePaise > 0 ? <span style={{ color: '#e65100' }}>{money(emp.duePaise)} due</span>
