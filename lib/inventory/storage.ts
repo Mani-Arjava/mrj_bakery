@@ -22,8 +22,11 @@ export type ProductionItem = { id: string; name: string; productionUnit?: 'KG' |
 export type RecipeIngredient = { itemId: string; itemName: string; quantityPerUnit: number; unit: string };
 export type Recipe = { id: string; productionItemId: string; ingredients: RecipeIngredient[] };
 
+export type ProductPriceEntry = { date: string; retailPricePaise: number; wholesalePricePaise: number };
+export type ItemRateEntry = { date: string; supplierName: string; quantity: number; unit: string; unitRatePaise: number };
+
 // Finished goods / packaging variants sold to customers
-export type Product = { id: string; name: string; pricePerPacketPaise: number; wholesalePricePerPacketPaise?: number; createdAt: string; productionItemId?: string; count?: number; conversionUnit?: 'KG' | 'Tray'; piecesPerPacket?: number };
+export type Product = { id: string; name: string; pricePerPacketPaise: number; wholesalePricePerPacketPaise?: number; createdAt: string; productionItemId?: string; count?: number; conversionUnit?: 'KG' | 'Tray'; piecesPerPacket?: number; priceHistory?: ProductPriceEntry[] };
 
 export type ProductionBatchMaterial = { itemId: string; itemName: string; quantity: number; unit: string };
 export type ProductionBatchOutput = { productionItemId: string; productionItemName: string; quantity: number; unit: string };
@@ -140,7 +143,7 @@ export function getData(): InventoryData {
       suppliers: Array.isArray(parsed.suppliers) ? parsed.suppliers : [],
       items: Array.isArray(parsed.items) ? parsed.items.map((it: any) => ({ ...it, unit: nu(it.unit) })) : [],
       purchases: Array.isArray(parsed.purchases) ? parsed.purchases.map((p: any) => ({ ...p, lines: Array.isArray(p.lines) ? p.lines.map((l: any) => ({ ...l, unit: nu(l.unit) })) : [] })) : [],
-      products: Array.isArray(parsed.products) ? parsed.products : [],
+      products: Array.isArray(parsed.products) ? parsed.products.map((p: any) => ({ ...p, priceHistory: p.priceHistory ?? [{ date: p.createdAt || new Date().toISOString().slice(0, 10), retailPricePaise: p.pricePerPacketPaise, wholesalePricePaise: p.wholesalePricePerPacketPaise ?? 0 }] })) : [],
       productionItems: Array.isArray(parsed.productionItems) ? parsed.productionItems : [],
       recipes: Array.isArray(parsed.recipes) ? parsed.recipes : [],
       productionBatches: Array.isArray(parsed.productionBatches) ? parsed.productionBatches : [],
@@ -329,7 +332,8 @@ export function deleteRecipe(productionItemId: string) {
 // ========== PRODUCTS ==========
 export function addProduct(input: Omit<Product, 'id' | 'createdAt'>) {
   const data = getData();
-  const product: Product = { id: id(), ...input, createdAt: new Date().toISOString().slice(0, 10) };
+  const today = new Date().toISOString().slice(0, 10);
+  const product: Product = { id: id(), ...input, createdAt: today, priceHistory: [{ date: today, retailPricePaise: input.pricePerPacketPaise, wholesalePricePaise: input.wholesalePricePerPacketPaise ?? 0 }] };
   data.products.push(product);
   save(data);
   return product;
@@ -339,6 +343,11 @@ export function updateProduct(productId: string, updates: Omit<Product, 'id' | '
   const data = getData();
   const product = data.products.find(p => p.id === productId);
   if (!product) throw new Error('Product not found.');
+  const priceChanged = product.pricePerPacketPaise !== updates.pricePerPacketPaise ||
+    (product.wholesalePricePerPacketPaise ?? 0) !== (updates.wholesalePricePerPacketPaise ?? 0);
+  if (priceChanged) {
+    updates = { ...updates, priceHistory: [...(product.priceHistory ?? []), { date: new Date().toISOString().slice(0, 10), retailPricePaise: updates.pricePerPacketPaise, wholesalePricePaise: updates.wholesalePricePerPacketPaise ?? 0 }] };
+  }
   Object.assign(product, updates);
   data.saleInvoices.forEach(inv => inv.lines.forEach(line => { if (line.productId === productId) line.productName = product.name; }));
   save(data);
@@ -713,6 +722,16 @@ export type PLDaySummary = {
   profitPaise: number;
   profitPercent: number;
 };
+
+export function getItemPurchaseRateHistory(itemId: string): ItemRateEntry[] {
+  const data = getData();
+  const entries: ItemRateEntry[] = [];
+  for (const p of data.purchases ?? []) {
+    const line = p.lines.find(l => l.itemId === itemId);
+    if (line) entries.push({ date: p.date, supplierName: p.supplierName, quantity: line.quantity, unit: line.unit, unitRatePaise: line.unitPricePaise });
+  }
+  return entries.sort((a, b) => a.date.localeCompare(b.date));
+}
 
 function getItemLatestRatePaise(data: InventoryData, itemId: string): number {
   let latestDate = '';

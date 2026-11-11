@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import * as storage from '@/lib/inventory/storage';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import './simple.css';
 import './simple-actions.css';
 
@@ -81,7 +82,129 @@ function ItemForm({ form, setForm, submit, close, editing }: { form: ItemFormVal
   return <div className="im-modal-backdrop"><div className="im-modal"><button className="im-modal-close" onClick={close}>×</button><h2>{editing ? 'Edit item' : 'Add item'}</h2><form className="im-modal-form" onSubmit={submit}><label>Item name<input autoFocus required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Maida" /></label><label>Unit of measurement<select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>{UNITS.map((unit) => <option key={unit}>{unit}</option>)}</select></label>{!editing && <p className="im-muted">New items start with 0 stock.</p>}<button className="im-primary" type="submit">{editing ? 'Save changes' : 'Add item'}</button></form></div></div>;
 }
 
-function ItemActions({ edit, remove }: { edit: () => void; remove: () => void }) { return <div className="row-actions"><button className="action-edit" onClick={edit}>Edit</button><button className="action-delete" onClick={remove}>Delete</button></div>; }
+function ItemActions({ edit, remove, history }: { edit: () => void; remove: () => void; history?: () => void }) { return <div className="row-actions">{history && <button className="action-history" onClick={history}>₹</button>}<button className="action-edit" onClick={edit}>Edit</button><button className="action-delete" onClick={remove}>Delete</button></div>; }
+
+function ItemPriceHistoryModal({ item, onClose }: { item: storage.InventoryItem; onClose: () => void }) {
+  const history = storage.getItemPurchaseRateHistory(item.id);
+  const currentRate = history.length ? history[history.length - 1].unitRatePaise : 0;
+  return (
+    <div className="im-modal-backdrop" onClick={onClose}>
+      <div className="im-modal price-history-modal" onClick={e => e.stopPropagation()}>
+        <button className="im-modal-close" onClick={onClose}>×</button>
+        <p className="im-kicker">ITEM PRICE HISTORY</p>
+        <h2>{item.name}</h2>
+        {history.length === 0 ? (
+          <div className="im-empty"><b>No purchase history yet</b><p>Rate changes will appear here once you record purchases for this item.</p></div>
+        ) : (
+          <>
+            <div className="price-history-current">
+              <div><span>CURRENT RATE</span><strong>{money(currentRate)}</strong></div>
+              <div><span>UNIT</span><strong>{item.unit}</strong></div>
+              <div><span>PURCHASES</span><strong>{history.length}</strong></div>
+            </div>
+            {history.length >= 2 && (
+              <div className="price-chart-wrap">
+                <ResponsiveContainer width="100%" height={180}>
+                  <LineChart data={history} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#edf0eb" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                    <YAxis tickFormatter={(v: number) => `₹${(v / 100).toFixed(0)}`} tick={{ fontSize: 10 }} width={50} />
+                    <Tooltip formatter={(v: unknown) => [money(v as number), 'Rate']} />
+                    <Line type="monotone" dataKey="unitRatePaise" stroke="#3a2013" strokeWidth={2} dot={{ r: 4 }} name="Rate" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            <div className="im-table-scroll">
+              <table>
+                <thead><tr><th>Date</th><th>Supplier</th><th>Qty</th><th>Rate / {item.unit}</th></tr></thead>
+                <tbody>
+                  {history.map((entry, i) => {
+                    const prev = i > 0 ? history[i - 1].unitRatePaise : null;
+                    const changed = prev !== null && entry.unitRatePaise !== prev;
+                    return (
+                      <tr key={i} style={changed ? { background: '#fffbf0' } : undefined}>
+                        <td>{entry.date}</td>
+                        <td>{entry.supplierName}</td>
+                        <td>{entry.quantity} {entry.unit}</td>
+                        <td>
+                          <strong>{money(entry.unitRatePaise)}</strong>
+                          {changed && prev !== null && (
+                            <span className={entry.unitRatePaise > prev ? 'price-change-up' : 'price-change-down'} style={{ marginLeft: 6, fontSize: 11 }}>
+                              {entry.unitRatePaise > prev ? '↑' : '↓'} {money(Math.abs(entry.unitRatePaise - prev))}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProductPriceHistoryModal({ product, onClose }: { product: storage.Product; onClose: () => void }) {
+  const history = product.priceHistory ?? [];
+  return (
+    <div className="im-modal-backdrop" onClick={onClose}>
+      <div className="im-modal price-history-modal" onClick={e => e.stopPropagation()}>
+        <button className="im-modal-close" onClick={onClose}>×</button>
+        <p className="im-kicker">PRODUCT PRICE HISTORY</p>
+        <h2>{product.name}</h2>
+        <div className="price-history-current">
+          <div><span>RETAIL</span><strong>{money(product.pricePerPacketPaise)}</strong></div>
+          {product.wholesalePricePerPacketPaise != null && <div><span>WHOLESALE</span><strong>{money(product.wholesalePricePerPacketPaise)}</strong></div>}
+          <div><span>CHANGES</span><strong>{Math.max(0, history.length - 1)}</strong></div>
+        </div>
+        {history.length >= 2 && (
+          <div className="price-chart-wrap">
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={history} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#edf0eb" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                <YAxis tickFormatter={(v: number) => `₹${(v / 100).toFixed(0)}`} tick={{ fontSize: 10 }} width={50} />
+                <Tooltip formatter={(v: unknown) => money(v as number)} />
+                <Line type="monotone" dataKey="retailPricePaise" stroke="#3a2013" strokeWidth={2} dot={{ r: 4 }} name="Retail" />
+                {history.some(h => (h.wholesalePricePaise ?? 0) > 0) && (
+                  <Line type="monotone" dataKey="wholesalePricePaise" stroke="#5b806f" strokeWidth={2} dot={{ r: 4 }} strokeDasharray="5 5" name="Wholesale" />
+                )}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        <div className="im-table-scroll">
+          <table>
+            <thead><tr><th>Date</th><th>Retail Price</th><th>Wholesale Price</th><th>Change</th></tr></thead>
+            <tbody>
+              {history.map((entry, i) => {
+                const prev = i > 0 ? history[i - 1] : null;
+                const retailChanged = prev && entry.retailPricePaise !== prev.retailPricePaise;
+                const up = prev && entry.retailPricePaise > prev.retailPricePaise;
+                return (
+                  <tr key={i}>
+                    <td>{entry.date}</td>
+                    <td><strong>{money(entry.retailPricePaise)}</strong></td>
+                    <td>{(entry.wholesalePricePaise ?? 0) > 0 ? money(entry.wholesalePricePaise) : '—'}</td>
+                    <td>
+                      {!prev ? <span style={{ color: 'var(--muted)', fontSize: 11 }}>Initial</span>
+                        : retailChanged ? <span className={up ? 'price-change-up' : 'price-change-down'}>{up ? '↑' : '↓'} {money(Math.abs(entry.retailPricePaise - prev.retailPricePaise))}</span>
+                        : <span style={{ color: 'var(--muted)' }}>—</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function ItemsWorkspace() {
   const { data, run, notice, error } = useSimpleInventory();
@@ -89,11 +212,12 @@ export function ItemsWorkspace() {
   const [editing, setEditing] = useState<storage.InventoryItem | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<ItemFormValue>({ name: '', unit: 'Kg' });
+  const [historyItem, setHistoryItem] = useState<storage.InventoryItem | null>(null);
   function openCreate() { setEditing(null); setForm({ name: '', unit: 'Kg' }); setShowForm(true); }
   function openEdit(item: storage.InventoryItem) { setEditing(item); setForm({ name: item.name, unit: item.unit }); setShowForm(true); }
   function submit(event: FormEvent) { event.preventDefault(); if (!form.name.trim()) return; run(() => editing ? storage.updateItem(editing.id, { ...form, name: form.name.trim() }) : storage.addItem({ ...form, name: form.name.trim() })); setEditing(null); setShowForm(false); }
   function remove(item: storage.InventoryItem) { if (window.confirm(`Delete ${item.name}?`)) run(() => storage.deleteItem(item.id)); }
-  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">ITEMS</p><h2 className="im-page-title">Your regular purchases</h2></div><div className="action-group"><ViewToggle mode={mode} setMode={setMode} /><button className="im-primary" onClick={openCreate}>+ Add item</button></div></div>{data.items.length === 0 ? <Empty title="No items yet" text="Create an item to make it available in Purchases." action="Add item" onAction={openCreate} /> : mode === 'table' ? <div className="im-panel im-table-scroll"><table><thead><tr><th>Item</th><th>Unit</th><th>Current stock</th><th>Actions</th></tr></thead><tbody>{data.items.map((item) => <tr key={item.id}><td><b>{item.name}</b></td><td>{item.unit}</td><td className="stock-value">{item.quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })} {item.unit}</td><td><ItemActions edit={() => openEdit(item)} remove={() => remove(item)} /></td></tr>)}</tbody></table></div> : <div className="im-party-grid item-card-grid">{data.items.map((item) => <article className="im-party-card item-card" key={item.id}><div className="supplier-info-rows"><span className="supplier-row-label">Item</span><span className="supplier-row-value">{item.name}</span><span className="supplier-row-label">Unit</span><span className="supplier-row-value">{item.unit}</span><span className="supplier-row-label">Stock</span><span className="supplier-row-value stock-value">{item.quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })} {item.unit}</span></div><ItemActions edit={() => openEdit(item)} remove={() => remove(item)} /></article>)}</div>}{showForm && <ItemForm form={form} setForm={setForm} submit={submit} close={() => { setEditing(null); setShowForm(false); }} editing={!!editing} />}</>;
+  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">ITEMS</p><h2 className="im-page-title">Your regular purchases</h2></div><div className="action-group"><ViewToggle mode={mode} setMode={setMode} /><button className="im-primary" onClick={openCreate}>+ Add item</button></div></div>{data.items.length === 0 ? <Empty title="No items yet" text="Create an item to make it available in Purchases." action="Add item" onAction={openCreate} /> : mode === 'table' ? <div className="im-panel im-table-scroll"><table><thead><tr><th>Item</th><th>Unit</th><th>Current stock</th><th>Actions</th></tr></thead><tbody>{data.items.map((item) => <tr key={item.id}><td><b>{item.name}</b></td><td>{item.unit}</td><td className="stock-value">{item.quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })} {item.unit}</td><td><ItemActions edit={() => openEdit(item)} remove={() => remove(item)} history={() => setHistoryItem(item)} /></td></tr>)}</tbody></table></div> : <div className="im-party-grid item-card-grid">{data.items.map((item) => <article className="im-party-card item-card" key={item.id}><div className="supplier-info-rows"><span className="supplier-row-label">Item</span><span className="supplier-row-value">{item.name}</span><span className="supplier-row-label">Unit</span><span className="supplier-row-value">{item.unit}</span><span className="supplier-row-label">Stock</span><span className="supplier-row-value stock-value">{item.quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })} {item.unit}</span></div><ItemActions edit={() => openEdit(item)} remove={() => remove(item)} history={() => setHistoryItem(item)} /></article>)}</div>}{showForm && <ItemForm form={form} setForm={setForm} submit={submit} close={() => { setEditing(null); setShowForm(false); }} editing={!!editing} />}{historyItem && <ItemPriceHistoryModal item={historyItem} onClose={() => setHistoryItem(null)} />}</>;
 }
 
 type PurchaseLineDraft = { itemId: string; quantity: string; unit: string; rate: string; total: string };
@@ -414,6 +538,7 @@ export function ProductsWorkspace() {
   const [editing, setEditing] = useState<storage.Product | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', piecesPerPacket: '', count: '', conversionUnit: 'KG' as 'KG' | 'Tray', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' });
+  const [historyProduct, setHistoryProduct] = useState<storage.Product | null>(null);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -517,7 +642,7 @@ export function ProductsWorkspace() {
                     <td>{money(product.pricePerPacketPaise)}</td>
                     <td>{product.wholesalePricePerPacketPaise != null ? money(product.wholesalePricePerPacketPaise) : '—'}</td>
                     <td>{prodItem ? prodItem.name : <span style={{ color: 'var(--muted)' }}>—</span>}</td>
-                    <td><div className="row-actions"><button className="action-edit" onClick={() => editProduct(product)}>Edit</button><button className="action-delete" onClick={() => removeProduct(product)}>Delete</button></div></td>
+                    <td><div className="row-actions"><button className="action-history" onClick={() => setHistoryProduct(product)}>₹</button><button className="action-edit" onClick={() => editProduct(product)}>Edit</button><button className="action-delete" onClick={() => removeProduct(product)}>Delete</button></div></td>
                   </tr>
                 );
               })}
@@ -544,13 +669,14 @@ export function ProductsWorkspace() {
                   <span className="supplier-row-label">Linked</span>
                   <span className="supplier-row-value">{prodItem ? prodItem.name : '—'}</span>
                 </div>
-                <div className="row-actions"><button className="action-edit" onClick={() => editProduct(product)}>Edit</button><button className="action-delete" onClick={() => removeProduct(product)}>Delete</button></div>
+                <div className="row-actions"><button className="action-history" onClick={() => setHistoryProduct(product)}>₹</button><button className="action-edit" onClick={() => editProduct(product)}>Edit</button><button className="action-delete" onClick={() => removeProduct(product)}>Delete</button></div>
               </article>
             );
           })}
         </div>
       )}
     </section>
+    {historyProduct && <ProductPriceHistoryModal product={historyProduct} onClose={() => setHistoryProduct(null)} />}
   </>;
 }
 
