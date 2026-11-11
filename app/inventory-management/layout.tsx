@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Menu } from 'lucide-react';
 import './inventory.css';
 
 const ADMIN_USER = 'imran123';
@@ -16,6 +16,7 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -23,6 +24,8 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
     setLoggedIn(localStorage.getItem('bakery_auth') === '1');
     setHydrated(true);
   }, []);
+
+  useEffect(() => { setMobileNavOpen(false); }, [pathname]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,5 +62,5 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
 
   const currentView = navigation.find(n => pathname === n.href)?.label || 'Dashboard';
 
-  return <div className="im-app"><aside className="im-sidebar"><button className="im-brand" onClick={() => router.push('/inventory-management/purchases')}><span>MRJ</span><small>BAKERY</small></button>{navigation.map((item) => <button key={item.href} className={pathname === item.href ? 'active' : ''} onClick={() => router.push(item.href)}>{item.label}</button>)}<div className="im-sidebar-bottom"><span>Bakery management</span><button className="im-logout-btn" onClick={() => { localStorage.removeItem('bakery_auth'); window.location.reload(); }}>Sign out</button>{confirmReset ? (<div style={{ background: '#3a1a1a', borderRadius: '6px', padding: '10px', marginTop: '4px' }}><p style={{ color: '#ee8c78', fontSize: '11px', margin: '0 0 8px', lineHeight: 1.4 }}>This will delete ALL data. Cannot be undone.</p><div style={{ display: 'flex', gap: '6px' }}><button style={{ flex: 1, background: '#a43932', color: '#fff', border: 0, borderRadius: '4px', padding: '7px 0', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }} onClick={() => { localStorage.removeItem('bakery_inventory_v2'); localStorage.removeItem('bakery_inventory_v1'); window.location.reload(); }}>Delete all</button><button style={{ flex: 1, background: '#ffffff20', color: '#f0e6d8', border: 0, borderRadius: '4px', padding: '7px 0', fontSize: '11px', cursor: 'pointer' }} onClick={() => setConfirmReset(false)}>Cancel</button></div></div>) : (<button style={{ color: '#ee8c78', padding: '5px 0', background: 'transparent', border: 0, cursor: 'pointer', fontSize: '11px', textAlign: 'left', width: '100%' }} onClick={() => setConfirmReset(true)}>Reset all data</button>)}</div></aside><section className="im-workspace"><header className="im-topbar"><div><p className="im-kicker">MRJ BAKERY</p><h1>{currentView}</h1></div><span className="im-date" suppressHydrationWarning>{new Intl.DateTimeFormat('en-IN', { dateStyle: 'full' }).format(new Date())}</span></header>{children}</section></div>;
+  return <div className="im-app"><div className="im-mobile-bar"><button className="im-hamburger" onClick={() => setMobileNavOpen(true)}><Menu size={22} /></button><span className="im-mobile-bar-title">MRJ</span><span className="im-mobile-bar-page">{currentView}</span></div><div className={`im-nav-backdrop${mobileNavOpen ? ' im-open' : ''}`} onClick={() => setMobileNavOpen(false)} /><aside className={`im-sidebar${mobileNavOpen ? ' im-open' : ''}`}><button className="im-brand" onClick={() => router.push('/inventory-management/purchases')}><span>MRJ</span><small>BAKERY</small></button>{navigation.map((item) => <button key={item.href} className={pathname === item.href ? 'active' : ''} onClick={() => router.push(item.href)}>{item.label}</button>)}<div className="im-sidebar-bottom"><span>Bakery management</span><button className="im-logout-btn" onClick={() => { localStorage.removeItem('bakery_auth'); window.location.reload(); }}>Sign out</button>{confirmReset ? (<div style={{ background: '#3a1a1a', borderRadius: '6px', padding: '10px', marginTop: '4px' }}><p style={{ color: '#ee8c78', fontSize: '11px', margin: '0 0 8px', lineHeight: 1.4 }}>This will delete ALL data. Cannot be undone.</p><div style={{ display: 'flex', gap: '6px' }}><button style={{ flex: 1, background: '#a43932', color: '#fff', border: 0, borderRadius: '4px', padding: '7px 0', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }} onClick={() => { localStorage.removeItem('bakery_inventory_v2'); localStorage.removeItem('bakery_inventory_v1'); window.location.reload(); }}>Delete all</button><button style={{ flex: 1, background: '#ffffff20', color: '#f0e6d8', border: 0, borderRadius: '4px', padding: '7px 0', fontSize: '11px', cursor: 'pointer' }} onClick={() => setConfirmReset(false)}>Cancel</button></div></div>) : (<button style={{ color: '#ee8c78', padding: '5px 0', background: 'transparent', border: 0, cursor: 'pointer', fontSize: '11px', textAlign: 'left', width: '100%' }} onClick={() => setConfirmReset(true)}>Reset all data</button>)}</div></aside><section className="im-workspace"><header className="im-topbar"><div><p className="im-kicker">MRJ BAKERY</p><h1>{currentView}</h1></div><span className="im-date" suppressHydrationWarning>{new Intl.DateTimeFormat('en-IN', { dateStyle: 'full' }).format(new Date())}</span></header>{children}</section></div>;
 }
