@@ -675,3 +675,123 @@ export function getEmployeeSalaryHistory(employeeId: string) {
     );
   return { openingBalancePaise, entries: acc.list, currentBalancePaise: emp.advancePaise - emp.duePaise };
 }
+
+// ========== PROFIT & LOSS ==========
+
+export type PLProductionLine = {
+  productionItemId: string;
+  productionItemName: string;
+  productName: string;
+  quantityInUnit: number;
+  unit: string;
+  piecesProduced: number;
+  packets: number;
+  retailValuePaise: number;
+  wholesaleValuePaise: number;
+};
+
+export type PLMaterialLine = {
+  itemId: string;
+  itemName: string;
+  quantity: number;
+  unit: string;
+  unitRatePaise: number;
+  totalCostPaise: number;
+};
+
+export type PLDaySummary = {
+  date: string;
+  productionLines: PLProductionLine[];
+  materialLines: PLMaterialLine[];
+  salaryExpenses: Expense[];
+  otherExpenses: Expense[];
+  totalProductionValuePaise: number;
+  totalMaterialCostPaise: number;
+  totalSalaryCostPaise: number;
+  totalOtherCostPaise: number;
+  totalCostPaise: number;
+  profitPaise: number;
+  profitPercent: number;
+};
+
+function getItemLatestRatePaise(data: InventoryData, itemId: string): number {
+  let latestDate = '';
+  let latestRate = 0;
+  for (const p of data.purchases ?? []) {
+    const line = p.lines.find(l => l.itemId === itemId);
+    if (line && p.date >= latestDate) { latestDate = p.date; latestRate = line.unitPricePaise; }
+  }
+  return latestRate;
+}
+
+export function getPLSummary(date: string): PLDaySummary {
+  const data = getData();
+  const batches = (data.productionBatches ?? []).filter(b => b.date === date);
+  const expenses = (data.expenses ?? []).filter(e => e.date === date);
+
+  const prodMap = new Map<string, PLProductionLine>();
+  for (const batch of batches) {
+    for (const produced of batch.productsProduced ?? []) {
+      const product = (data.products ?? []).find(p => p.productionItemId === produced.productionItemId);
+      if (!product || !product.count || !product.piecesPerPacket) continue;
+      const piecesProduced = produced.quantity * product.count;
+      const packets = piecesProduced / product.piecesPerPacket;
+      const existing = prodMap.get(produced.productionItemId);
+      if (existing) {
+        existing.quantityInUnit += produced.quantity;
+        existing.piecesProduced += piecesProduced;
+        existing.packets += packets;
+        existing.retailValuePaise += packets * product.pricePerPacketPaise;
+        existing.wholesaleValuePaise += packets * (product.wholesalePricePerPacketPaise ?? product.pricePerPacketPaise);
+      } else {
+        prodMap.set(produced.productionItemId, {
+          productionItemId: produced.productionItemId,
+          productionItemName: produced.productionItemName,
+          productName: product.name,
+          quantityInUnit: produced.quantity,
+          unit: produced.unit,
+          piecesProduced,
+          packets,
+          retailValuePaise: packets * product.pricePerPacketPaise,
+          wholesaleValuePaise: packets * (product.wholesalePricePerPacketPaise ?? product.pricePerPacketPaise),
+        });
+      }
+    }
+  }
+  const productionLines = Array.from(prodMap.values());
+
+  const matMap = new Map<string, PLMaterialLine>();
+  for (const batch of batches) {
+    for (const mat of batch.rawMaterials ?? []) {
+      const unitRatePaise = getItemLatestRatePaise(data, mat.itemId);
+      const existing = matMap.get(mat.itemId);
+      if (existing) {
+        existing.quantity += mat.quantity;
+        existing.totalCostPaise += mat.quantity * unitRatePaise;
+      } else {
+        matMap.set(mat.itemId, { itemId: mat.itemId, itemName: mat.itemName, quantity: mat.quantity, unit: mat.unit, unitRatePaise, totalCostPaise: mat.quantity * unitRatePaise });
+      }
+    }
+  }
+  const materialLines = Array.from(matMap.values());
+
+  const salaryExpenses = expenses.filter(e => e.category === 'salary');
+  const otherExpenses = expenses.filter(e => e.category !== 'salary');
+  const totalProductionValuePaise = productionLines.reduce((s, l) => s + l.retailValuePaise, 0);
+  const totalMaterialCostPaise = materialLines.reduce((s, l) => s + l.totalCostPaise, 0);
+  const totalSalaryCostPaise = salaryExpenses.reduce((s, e) => s + e.amountPaise, 0);
+  const totalOtherCostPaise = otherExpenses.reduce((s, e) => s + e.amountPaise, 0);
+  const totalCostPaise = totalMaterialCostPaise + totalSalaryCostPaise + totalOtherCostPaise;
+  const profitPaise = totalProductionValuePaise - totalCostPaise;
+  const profitPercent = totalProductionValuePaise > 0 ? (profitPaise / totalProductionValuePaise) * 100 : 0;
+
+  return { date, productionLines, materialLines, salaryExpenses, otherExpenses, totalProductionValuePaise, totalMaterialCostPaise, totalSalaryCostPaise, totalOtherCostPaise, totalCostPaise, profitPaise, profitPercent };
+}
+
+export function getPLDates(): string[] {
+  const data = getData();
+  const dates = new Set<string>();
+  for (const b of data.productionBatches ?? []) dates.add(b.date);
+  for (const e of data.expenses ?? []) dates.add(e.date);
+  return Array.from(dates).sort((a, b) => b.localeCompare(a));
+}
