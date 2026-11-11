@@ -160,18 +160,24 @@ table th:nth-child(1){min-width:100px!important}
 /* Custom name row */
 .exp-custom-name-row{margin-top:8px}
 .exp-custom-name-row input{display:block;width:100%;padding:9px 11px;border:1px solid #dbe2d8;border-radius:7px;font:12px 'DM Sans';background:#fafaf8;color:var(--ink)}
-/* History cards */
-.expense-hist-card{border:1px solid var(--line);border-radius:9px;padding:14px 16px;background:#fbfcf8;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-.expense-hist-card-left{flex:1;min-width:0}
-.expense-hist-card-name{font:600 14px 'DM Sans';color:var(--ink)}
-.expense-hist-card-meta{font-size:11px;color:var(--muted);margin-top:3px}
-.expense-hist-card-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
-.expense-hist-card-amount{font:700 16px 'DM Sans';color:var(--ink)}
-.expense-hist-list{display:grid;gap:10px}
+/* History section header */
+.exp-head-history{background:#f5f2ee;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px}
+.exp-head-history .exp-section-title svg{color:#7a6a5a}
+/* History table */
+.exp-hist-table{width:100%;border-collapse:collapse}
+.exp-hist-table thead th{background:#faf8f5!important;padding:9px 14px!important;font:700 10px 'DM Sans'!important;color:#8f7662!important;text-transform:uppercase!important;letter-spacing:.06em!important;text-align:left!important;border-bottom:1px solid var(--line)!important;min-width:0!important;white-space:nowrap!important}
+.exp-hist-table thead tr{border-bottom:none!important}
+.exp-hist-table tbody tr{border-bottom:1px solid #f5f0ea!important}
+.exp-hist-table tbody tr:last-child{border-bottom:none!important}
+.exp-hist-table td{padding:12px 14px!important;vertical-align:middle!important;font-size:13px!important}
+.exp-hist-name{font-weight:600!important;color:var(--ink)!important;min-width:120px}
+.exp-hist-meta{color:var(--muted)!important;font-size:12px!important;font-weight:400!important}
+.exp-hist-amount{font:700 14px 'DM Sans'!important;color:var(--ink)!important;white-space:nowrap!important}
+.exp-hist-table td:last-child{width:120px!important;padding:8px 14px!important}
 /* Tabs */
 .expense-tabs{display:flex;gap:4px;flex-wrap:wrap}
 .expense-tabs button{padding:7px 14px;border-radius:20px;border:1px solid var(--line);font:600 12px 'DM Sans';cursor:pointer;background:#fff;color:var(--muted)}
 .expense-tabs button.active{background:var(--coffee);color:#f0e6d8;border-color:var(--coffee)}
 /* Mobile */
-@media(max-width:700px){.expense-hist-card{flex-direction:column;gap:10px}.expense-hist-card-right{flex-direction:row;align-items:center;width:100%;justify-content:space-between}.exp-salary-row{grid-template-columns:1fr 1fr 40px}.exp-other-row{grid-template-columns:1fr 1fr 40px}.exp-salary-row .exp-field:first-child{grid-column:1/-1}.exp-other-row .exp-field:last-of-type{grid-column:1/3}}
+@media(max-width:700px){.exp-salary-row{grid-template-columns:1fr 1fr 40px}.exp-other-row{grid-template-columns:1fr 1fr 40px}.exp-salary-row .exp-field:first-child{grid-column:1/-1}.exp-other-row .exp-field:last-of-type{grid-column:1/3}.exp-hist-table th:nth-child(2),.exp-hist-table td:nth-child(2){display:none!important}}
 @media(max-width:520px){.date-nav input[type="date"]{flex:1;min-width:120px}.im-summary-grid.expense-stats{grid-template-columns:1fr 1fr}.exp-section-head{flex-direction:column;align-items:flex-start;gap:10px}.exp-salary-row,.exp-other-row{grid-template-columns:1fr;gap:10px}.exp-delete-btn{width:100%;height:36px;border-radius:6px}}
