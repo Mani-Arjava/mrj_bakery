@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, Fragment, useEffect, useState } from 'react';
 import * as storage from '@/lib/inventory/storage';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import './simple.css';
@@ -687,10 +687,13 @@ export function ProductionWorkspace() {
   const [editingBatch, setEditingBatch] = useState<storage.ProductionBatch | null>(null);
   const [matDrafts, setMatDrafts] = useState<Array<{ itemId: string; quantity: string }>>([{ itemId: '', quantity: '' }]);
   const [prodDrafts, setProdDrafts] = useState<Array<{ productionItemId: string; quantity: string }>>([{ productionItemId: '', quantity: '' }]);
-  const [summaryDate, setSummaryDate] = useState(today());
+  const [historyTab, setHistoryTab] = useState<'today' | 'all'>('today');
   const [showItemForm, setShowItemForm] = useState(false);
   const [editingItem, setEditingItem] = useState<storage.ProductionItem | null>(null);
   const [itemForm, setItemForm] = useState({ name: '' });
+
+  const prevDay = (d: string) => { const dt = new Date(d + 'T00:00:00'); dt.setDate(dt.getDate() - 1); return dt.toISOString().slice(0, 10); };
+  const nextDay = (d: string) => { const dt = new Date(d + 'T00:00:00'); dt.setDate(dt.getDate() + 1); return dt.toISOString().slice(0, 10); };
 
   function submitItem(e: FormEvent) {
     e.preventDefault();
@@ -716,7 +719,6 @@ export function ProductionWorkspace() {
   }
 
   function resetForm() {
-    setDate(today());
     setNotes('');
     setEditingBatch(null);
     setMatDrafts([{ itemId: '', quantity: '' }]);
@@ -788,7 +790,7 @@ export function ProductionWorkspace() {
 
   const allProduction = storage.getAllProductionBatches();
 
-  const dayBatches = allProduction.filter(b => b.date === summaryDate);
+  const dayBatches = allProduction.filter(b => b.date === date);
   const matTotals: Record<string, { name: string; qty: number; unit: string }> = {};
   for (const batch of dayBatches) {
     for (const m of batch.rawMaterials ?? []) {
@@ -803,6 +805,9 @@ export function ProductionWorkspace() {
       prodTotals[p.productionItemId].qty += p.quantity;
     }
   }
+  const totalMatsCount = Object.keys(matTotals).length;
+  const totalProdsCount = Object.keys(prodTotals).length;
+  const totalPcs = Object.values(prodTotals).reduce((s, p) => s + (p.count ? Math.round(p.qty * p.count) : 0), 0);
 
   const availableStock = data.productionItems
     .map(pi => {
@@ -815,10 +820,244 @@ export function ProductionWorkspace() {
     })
     .filter(pi => pi.pcs > 0);
 
+  const displayedBatches = historyTab === 'today' ? dayBatches : allProduction;
+
+  const TrashIcon = () => (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+    </svg>
+  );
+
   return <>
     <Feedback notice={notice} error={error} />
-    <div className="im-section-actions"><div><p className="im-kicker">PRODUCTION</p><h2 className="im-page-title">Record daily production</h2></div></div>
 
+    {/* Header + date nav */}
+    <div className="im-section-actions" style={{ flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+      <div>
+        <p className="im-kicker">PRODUCTION</p>
+        <h2 className="im-page-title">Record daily production</h2>
+      </div>
+      <div className="date-nav">
+        <button type="button" className="date-nav-btn" onClick={() => setDate(prevDay(date))}>←</button>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+        <button type="button" className="date-nav-btn" onClick={() => setDate(nextDay(date))} disabled={date >= today()}>→</button>
+        <button type="button" className="date-nav-btn today-btn" onClick={() => setDate(today())}>Today</button>
+      </div>
+    </div>
+
+    {/* Stats grid */}
+    <div className="im-summary-grid" style={{ marginBottom: '20px' }}>
+      <article>
+        <span>Batches</span>
+        <strong>{dayBatches.length}</strong>
+      </article>
+      <article className={totalMatsCount > 0 ? 'warning' : ''}>
+        <span>Raw Materials Used</span>
+        <strong>{totalMatsCount > 0 ? `${totalMatsCount} item${totalMatsCount !== 1 ? 's' : ''}` : '—'}</strong>
+      </article>
+      <article className={totalProdsCount > 0 ? 'positive' : ''}>
+        <span>Products Made</span>
+        <strong>{totalProdsCount > 0 ? `${totalProdsCount} item${totalProdsCount !== 1 ? 's' : ''}` : '—'}</strong>
+      </article>
+      <article>
+        <span>Total Pieces</span>
+        <strong>{totalPcs > 0 ? totalPcs.toLocaleString('en-IN') : '—'}</strong>
+      </article>
+    </div>
+
+    {/* Edit banner */}
+    {editingBatch && (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px', flexWrap: 'wrap', background: '#fff8ec', border: '1px solid #f2c48d', borderRadius: '10px', padding: '12px 16px' }}>
+        <span style={{ font: '600 13px \'DM Sans\'', color: '#a05a00' }}>Editing production record</span>
+        <button type="button" className="im-secondary" style={{ fontSize: '12px', padding: '6px 12px' }} onClick={resetForm}>✕ Cancel edit</button>
+      </div>
+    )}
+
+    {/* New / Edit record form */}
+    <form onSubmit={handleSubmit}>
+      {/* Raw Materials Used */}
+      <div className="exp-section">
+        <div className="exp-section-head exp-head-salary">
+          <div className="exp-section-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+            </svg>
+            Raw Materials Used
+          </div>
+          <button type="button" className="exp-add-btn"
+            onClick={() => setMatDrafts(d => [...d, { itemId: '', quantity: '' }])}>
+            + Add Material
+          </button>
+        </div>
+        <div className="exp-section-body" style={{ padding: 0, display: 'block' }}>
+          <div className="prod-line-head" style={{ padding: '8px 16px' }}><span>Item</span><span>Qty</span><span>Unit</span><span /></div>
+          {matDrafts.map((draft, idx) => {
+            const selectedItem = draft.itemId ? data.items.find(it => it.id === draft.itemId) : undefined;
+            const oldQty = editingBatch?.rawMaterials?.find(m => m.itemId === draft.itemId)?.quantity ?? 0;
+            const available = selectedItem ? selectedItem.quantity + oldQty : 0;
+            const enteredQty = Number(draft.quantity);
+            const overLimit = selectedItem && draft.quantity && enteredQty > available;
+            return (
+              <Fragment key={idx}>
+                <div className="prod-line" style={{ padding: '10px 16px' }}>
+                  <select value={draft.itemId} onChange={e => setMatDrafts(matDrafts.map((d, i) => i === idx ? { ...d, itemId: e.target.value } : d))}>
+                    <option value="">Select item…</option>
+                    {data.items.map(it => <option key={it.id} value={it.id} disabled={matDrafts.some((d, i) => i !== idx && d.itemId === it.id)}>{it.name} (stock: {it.quantity} {it.unit})</option>)}
+                  </select>
+                  <input type="number" min="0.001" step="0.001" value={draft.quantity}
+                    onChange={e => setMatDrafts(matDrafts.map((d, i) => i === idx ? { ...d, quantity: e.target.value } : d))}
+                    placeholder="0"
+                    style={overLimit ? { borderColor: '#a43932' } : undefined} />
+                  <span className="prod-unit-label">{selectedItem?.unit || '—'}</span>
+                  <button type="button" className="exp-delete-btn" title="Remove"
+                    onClick={() => matDrafts.length > 1 ? setMatDrafts(matDrafts.filter((_, i) => i !== idx)) : setMatDrafts([{ itemId: '', quantity: '' }])}>
+                    <TrashIcon />
+                  </button>
+                </div>
+                {overLimit && (
+                  <p className="prod-over-stock-msg" style={{ padding: '0 16px 6px' }}>
+                    Only {available.toLocaleString('en-IN', { maximumFractionDigits: 3 })} {selectedItem!.unit} in stock
+                  </p>
+                )}
+              </Fragment>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Products Made */}
+      <div className="exp-section">
+        <div className="exp-section-head exp-head-other">
+          <div className="exp-section-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+            Products Made
+          </div>
+          <button type="button" className="exp-add-btn"
+            onClick={() => setProdDrafts(d => [...d, { productionItemId: '', quantity: '' }])}>
+            + Add Product
+          </button>
+        </div>
+        <div className="exp-section-body" style={{ padding: 0, display: 'block' }}>
+          <div className="prod-line-head" style={{ padding: '8px 16px' }}><span>Product</span><span>Qty</span><span>Unit</span><span /></div>
+          {prodDrafts.map((draft, idx) => (
+            <div key={idx} className="prod-line" style={{ padding: '10px 16px' }}>
+              <select value={draft.productionItemId}
+                onChange={e => setProdDrafts(prodDrafts.map((d, i) => i === idx ? { productionItemId: e.target.value, quantity: '' } : d))}>
+                <option value="">Select production item…</option>
+                {data.productionItems.map(pi => <option key={pi.id} value={pi.id} disabled={prodDrafts.some((d, i) => i !== idx && d.productionItemId === pi.id)}>{pi.name}</option>)}
+              </select>
+              <input type="number" min="0.001" step="0.001" value={draft.quantity}
+                onChange={e => setProdDrafts(prodDrafts.map((d, i) => i === idx ? { ...d, quantity: e.target.value } : d))}
+                placeholder="0" />
+              <span className="prod-unit-label">{data.products.find(p => p.productionItemId === draft.productionItemId)?.conversionUnit ?? 'KG'}</span>
+              <button type="button" className="exp-delete-btn" title="Remove"
+                onClick={() => prodDrafts.length > 1 ? setProdDrafts(prodDrafts.filter((_, i) => i !== idx)) : setProdDrafts([{ productionItemId: '', quantity: '' }])}>
+                <TrashIcon />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Notes + Save */}
+      <div style={{ marginBottom: '24px' }}>
+        <label style={{ display: 'block', marginBottom: '12px' }}>
+          <span style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#506258', marginBottom: '6px' }}>Notes (optional)</span>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any production notes…" rows={2}
+            style={{ display: 'block', width: '100%', border: '1px solid #dbe2d8', borderRadius: '7px', padding: '10px 11px', background: '#fcfdfb', color: 'var(--ink)', font: '13px \'DM Sans\'', resize: 'vertical', boxSizing: 'border-box' }} />
+        </label>
+        <button type="submit" className="im-primary">{editingBatch ? 'Update record' : 'Save production'}</button>
+      </div>
+    </form>
+
+    {/* Production Records */}
+    <div className="exp-section">
+      <div className="exp-section-head exp-head-history">
+        <div className="exp-section-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          Production Records
+        </div>
+        <div className="expense-tabs">
+          <button type="button" className={historyTab === 'today' ? 'active' : ''} onClick={() => setHistoryTab('today')}>Today</button>
+          <button type="button" className={historyTab === 'all' ? 'active' : ''} onClick={() => setHistoryTab('all')}>All Records</button>
+        </div>
+      </div>
+      <div style={{ padding: 0 }}>
+        {displayedBatches.length === 0 ? (
+          <div style={{ padding: '24px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>
+            {historyTab === 'today' ? 'No production recorded for this date.' : 'No production records yet.'}
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="exp-hist-table">
+              <thead>
+                <tr>
+                  {historyTab === 'all' && <th>Date</th>}
+                  <th>Raw Materials</th>
+                  <th>Products Made</th>
+                  <th>Notes</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayedBatches.map(batch => {
+                  const matsStr = batch.rawMaterials?.map(m => `${m.itemName} ${m.quantity} ${m.unit}`).join(', ') || '—';
+                  const prodsStr = batch.productsProduced?.map(p => {
+                    const linkedProd = data.products.find(pr => pr.productionItemId === p.productionItemId);
+                    const pcs = linkedProd?.count ? ` · ${Math.round(p.quantity * linkedProd.count).toLocaleString('en-IN')} pcs` : '';
+                    return `${p.productionItemName} ${p.quantity} ${p.unit}${pcs}`;
+                  }).join(', ') || '—';
+                  return (
+                    <tr key={batch.id}>
+                      {historyTab === 'all' && <td style={{ whiteSpace: 'nowrap' }}>{batch.date}</td>}
+                      <td style={{ fontSize: '12px', maxWidth: '200px' }}>{matsStr}</td>
+                      <td style={{ fontSize: '12px', maxWidth: '200px' }}>{prodsStr}</td>
+                      <td style={{ fontSize: '12px', color: 'var(--muted)' }}>{batch.notes || '—'}</td>
+                      <td>
+                        <div className="row-actions">
+                          <button type="button" className="action-edit" onClick={() => startEdit(batch)}>Edit</button>
+                          <button type="button" className="action-delete" onClick={() => removeBatch(batch)}>Delete</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {allProduction.length > 0 && (
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="button" className="action-delete" style={{ fontSize: '11px', padding: '6px 12px' }}
+              onClick={() => { if (window.confirm('Delete ALL production records? This cannot be undone.')) run(() => storage.clearProductionHistory()); }}>
+              Clear all records
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+
+    {/* Product Stock */}
+    {availableStock.length > 0 && (
+      <section className="im-panel">
+        <div className="im-panel-title"><h2>Product Stock</h2></div>
+        {availableStock.map((pi, i) => (
+          <div key={i} className="production-summary-row">
+            <span>{pi.name}</span>
+            <b>{pi.qty.toLocaleString('en-IN', { maximumFractionDigits: 2 })} {pi.unit} · {pi.pcs.toLocaleString('en-IN')} pcs</b>
+          </div>
+        ))}
+      </section>
+    )}
+
+    {/* Production Items management */}
     <section className="im-panel">
       <div className="im-panel-title">
         <h2>Production Items</h2>
@@ -857,200 +1096,6 @@ export function ProductionWorkspace() {
               </div>
             );
           })}
-        </div>
-      )}
-    </section>
-
-    <section className="im-panel">
-      <div className="im-purchase-header" style={{ marginBottom: '16px' }}>
-        <div><h2 style={{ font: '700 22px/1 \'Playfair Display\'', margin: 0 }}>{editingBatch ? 'Edit production record' : 'New production record'}</h2>
-          <p className="im-muted" style={{ marginTop: '4px' }}>Record raw materials used and products made.</p>
-        </div>
-        <label style={{ margin: 0 }}>Date<input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-      </div>
-      <form onSubmit={handleSubmit}>
-
-        <p className="im-kicker" style={{ marginBottom: '6px' }}>Raw Materials Used</p>
-        <div className="im-purchase-lines">
-          <div className="prod-line-head">
-            <span>Item</span><span>Qty</span><span>Unit</span><span />
-          </div>
-          {matDrafts.map((draft, idx) => {
-            const selectedItem = draft.itemId ? data.items.find(it => it.id === draft.itemId) : undefined;
-            const oldQty = editingBatch?.rawMaterials?.find(m => m.itemId === draft.itemId)?.quantity ?? 0;
-            const available = selectedItem ? selectedItem.quantity + oldQty : 0;
-            const enteredQty = Number(draft.quantity);
-            const overLimit = selectedItem && draft.quantity && enteredQty > available;
-            return (
-              <div key={idx}>
-                <div className="prod-line">
-                  <select value={draft.itemId} onChange={e => setMatDrafts(matDrafts.map((d, i) => i === idx ? { ...d, itemId: e.target.value } : d))}>
-                    <option value="">Select item…</option>
-                    {data.items.map(it => <option key={it.id} value={it.id} disabled={matDrafts.some((d, i) => i !== idx && d.itemId === it.id)}>{it.name} (stock: {it.quantity} {it.unit})</option>)}
-                  </select>
-                  <input type="number" min="0.001" step="0.001" value={draft.quantity}
-                    onChange={e => setMatDrafts(matDrafts.map((d, i) => i === idx ? { ...d, quantity: e.target.value } : d))}
-                    placeholder="0"
-                    style={overLimit ? { borderColor: '#a43932' } : undefined} />
-                  <span className="prod-unit-label">{selectedItem?.unit || '—'}</span>
-                  <button type="button" className="im-remove"
-                    onClick={() => matDrafts.length > 1 ? setMatDrafts(matDrafts.filter((_, i) => i !== idx)) : setMatDrafts([{ itemId: '', quantity: '' }])}>×</button>
-                </div>
-                {overLimit && (
-                  <p className="prod-over-stock-msg" style={{ paddingLeft: '8px' }}>
-                    Only {available.toLocaleString('en-IN', { maximumFractionDigits: 3 })} {selectedItem!.unit} in stock
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <div className="purchase-actions">
-          <button type="button" className="im-text-button" onClick={() => setMatDrafts([...matDrafts, { itemId: '', quantity: '' }])}>+ Add material</button>
-        </div>
-
-        <p className="im-kicker" style={{ marginBottom: '6px', marginTop: '20px' }}>Products Made</p>
-        <div className="im-purchase-lines">
-          <div className="prod-line-head">
-            <span>Product</span><span>Qty</span><span>Unit</span><span />
-          </div>
-          {prodDrafts.map((draft, idx) => (
-            <div key={idx} className="prod-line">
-              <select value={draft.productionItemId}
-                onChange={e => setProdDrafts(prodDrafts.map((d, i) => i === idx ? { productionItemId: e.target.value, quantity: '' } : d))}>
-                <option value="">Select production item…</option>
-                {data.productionItems.map(pi => <option key={pi.id} value={pi.id}>{pi.name}</option>)}
-              </select>
-              <input type="number" min="0.001" step="0.001" value={draft.quantity}
-                onChange={e => setProdDrafts(prodDrafts.map((d, i) => i === idx ? { ...d, quantity: e.target.value } : d))}
-                placeholder="0" />
-              <span className="prod-unit-label">{data.products.find(p => p.productionItemId === draft.productionItemId)?.conversionUnit ?? 'KG'}</span>
-              <button type="button" className="im-remove"
-                onClick={() => prodDrafts.length > 1 ? setProdDrafts(prodDrafts.filter((_, i) => i !== idx)) : setProdDrafts([{ productionItemId: '', quantity: '' }])}>×</button>
-            </div>
-          ))}
-        </div>
-        <div className="purchase-actions">
-          <button type="button" className="im-text-button" onClick={() => setProdDrafts([...prodDrafts, { productionItemId: '', quantity: '' }])}>+ Add production item</button>
-        </div>
-
-        <label>Notes (optional)
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any production notes…" rows={2} />
-        </label>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {editingBatch && <button type="button" className="im-secondary" onClick={resetForm}>Cancel</button>}
-          <button type="submit" className="im-primary">{editingBatch ? 'Update record' : 'Save production'}</button>
-        </div>
-      </form>
-    </section>
-
-    <section className="im-panel">
-      <div className="im-panel-title">
-        <h2>Daily summary</h2>
-        <input type="date" value={summaryDate} onChange={e => setSummaryDate(e.target.value)}
-          style={{ border: '1px solid var(--line)', borderRadius: '6px', padding: '6px 10px', fontSize: '13px', background: '#fcfdfb', fontFamily: 'inherit' }} />
-      </div>
-      {dayBatches.length === 0 ? (
-        <p className="im-muted" style={{ fontSize: '13px' }}>No production recorded for this date.</p>
-      ) : (
-        <div className="production-summary-grid">
-          <div>
-            <p className="im-kicker" style={{ marginBottom: '6px' }}>Raw Materials Used</p>
-            {Object.values(matTotals).map((m, i) => (
-              <div key={i} className="production-summary-row">
-                <span>{m.name}</span>
-                <b>{m.qty.toLocaleString('en-IN', { maximumFractionDigits: 3 })} {m.unit}</b>
-              </div>
-            ))}
-            {Object.keys(matTotals).length === 0 && <p className="im-muted" style={{ fontSize: '12px' }}>—</p>}
-          </div>
-          <div>
-            <p className="im-kicker" style={{ marginBottom: '6px' }}>Products Made</p>
-            {Object.values(prodTotals).map((p, i) => (
-              <div key={i} className="production-summary-row">
-                <span>{p.name}</span>
-                <b>{p.qty.toLocaleString('en-IN', { maximumFractionDigits: 2 })} {p.unit}{p.count ? ` · ${Math.round(p.qty * p.count).toLocaleString('en-IN')} pcs` : ''}</b>
-              </div>
-            ))}
-            {Object.keys(prodTotals).length === 0 && <p className="im-muted" style={{ fontSize: '12px' }}>—</p>}
-          </div>
-        </div>
-      )}
-      <p style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '10px', marginBottom: 0 }}>
-        {dayBatches.length} batch{dayBatches.length === 1 ? '' : 'es'} recorded on this date
-      </p>
-    </section>
-
-    {availableStock.length > 0 && (
-      <section className="im-panel">
-        <div className="im-panel-title"><h2>Product Stock</h2></div>
-        {availableStock.map((pi, i) => (
-          <div key={i} className="production-summary-row">
-            <span>{pi.name}</span>
-            <b>{pi.qty.toLocaleString('en-IN', { maximumFractionDigits: 2 })} {pi.unit} · {pi.pcs.toLocaleString('en-IN')} pcs</b>
-          </div>
-        ))}
-      </section>
-    )}
-
-    <section className="im-panel">
-      <div className="im-panel-title">
-        <h2>Production records</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <input type="date" value={summaryDate} onChange={e => setSummaryDate(e.target.value)}
-            style={{ border: '1px solid var(--line)', borderRadius: '6px', padding: '6px 10px', fontSize: '13px', background: '#fcfdfb', fontFamily: 'inherit' }} />
-          {allProduction.length > 0 && (
-            <button className="action-delete" style={{ fontSize: '11px', padding: '6px 12px' }}
-              onClick={() => { if (window.confirm('Delete ALL production records? This cannot be undone.')) run(() => storage.clearProductionHistory()); }}>
-              Clear all
-            </button>
-          )}
-        </div>
-      </div>
-      {dayBatches.length === 0 ? (
-        <Empty title="No records for this date" text="Select a date above to view production records for that day." />
-      ) : (
-        <div className="im-party-grid">
-          {dayBatches.map((batch) => (
-            <article className="im-party-card production-batch-card" key={batch.id}>
-              {batch.notes && (
-                <div className="supplier-info-rows" style={{ marginBottom: '10px' }}>
-                  <span className="supplier-row-label">Notes</span>
-                  <span className="supplier-row-value">{batch.notes}</span>
-                </div>
-              )}
-              {(batch.rawMaterials?.length ?? 0) > 0 && (
-                <div style={{ marginBottom: '8px' }}>
-                  <p className="im-kicker" style={{ marginBottom: '4px' }}>Raw Materials Used</p>
-                  {batch.rawMaterials!.map((m, i) => (
-                    <div key={i} className="production-summary-row">
-                      <span>{m.itemName}</span>
-                      <b>{m.quantity} {m.unit}</b>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {(batch.productsProduced?.length ?? 0) > 0 && (
-                <div style={{ marginBottom: '8px' }}>
-                  <p className="im-kicker" style={{ marginBottom: '4px' }}>Products Made</p>
-                  {batch.productsProduced!.map((p, i) => {
-                    const linkedProd = data.products.find(pr => pr.productionItemId === p.productionItemId);
-                    const pcs = linkedProd?.count ? Math.round(p.quantity * linkedProd.count) : null;
-                    return (
-                      <div key={i} className="production-summary-row">
-                        <span>{p.productionItemName}</span>
-                        <b>{p.quantity} {p.unit}{pcs ? ` · ${pcs.toLocaleString('en-IN')} pcs` : ''}</b>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              <div className="row-actions">
-                <button className="action-edit" onClick={() => startEdit(batch)}>Edit</button>
-                <button className="action-delete" onClick={() => removeBatch(batch)}>Delete</button>
-              </div>
-            </article>
-          ))}
         </div>
       )}
     </section>

@@ -115,7 +115,7 @@ table th:nth-child(1){min-width:100px!important}
 .prod-line-head{display:grid;grid-template-columns:1fr 90px 60px 36px;gap:12px;align-items:center;padding:4px 8px 8px;border-bottom:1px solid #ddd8d0}
 .prod-line-head span{font-size:9px;font-weight:700;color:#b0a090;text-transform:uppercase;letter-spacing:.05em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .prod-line{display:grid;grid-template-columns:1fr 90px 60px 36px;gap:12px;align-items:center;padding:10px 8px;border-bottom:1px solid var(--line)}
-.prod-line:last-of-type{border-bottom:none}
+.prod-line:last-of-type{border-bottom:none}.exp-section .prod-line-head{padding-top:8px!important}.exp-section .prod-line:last-of-type{border-bottom:none!important}
 .prod-line select,.prod-line input{display:block;width:100%;padding:8px;border:1px solid var(--line);border-radius:4px;font-size:13px;font-family:inherit;background:#fcfdfb;color:var(--ink);margin:0!important}
 .prod-line input[type="number"]{text-align:center}
 .prod-unit-label{font-size:12px;font-weight:600;color:var(--ink);text-align:center}
