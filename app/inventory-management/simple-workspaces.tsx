@@ -1297,8 +1297,14 @@ ${dash}
   if (prevDue > 0) summaryLines += `Old due     :${fmt(prevDue)}\n`;
   if (prevAdv > 0) summaryLines += `Old advance :${fmt(prevAdv)}\n`;
   if (hasPrev)     summaryLines += `Grand Total :${fmt(grandTotal)}\n`;
-  summaryLines += `Amount Paid :${fmt(invoice.paidPaise)}\n`;
-  summaryLines += `Paid Via    :${(invoice.paymentType ?? 'Cash').padStart(30)}\n`;
+  if (invoice.payments?.length) {
+    for (const p of invoice.payments) {
+      summaryLines += `${p.type.padEnd(12)}:${fmt(p.amountPaise)}\n`;
+    }
+  } else {
+    summaryLines += `Amount Paid :${fmt(invoice.paidPaise)}\n`;
+    summaryLines += `Paid Via    :${(invoice.paymentType ?? 'Cash').padStart(30)}\n`;
+  }
   summaryLines += `Outstanding :${(netOut <= 0 ? `₹${(Math.abs(netOut) / 100).toFixed(2)} adv` : `₹${(netOut / 100).toFixed(2)}`).padStart(30)}`;
 
   content += `${dash}
@@ -1384,17 +1390,18 @@ export function BillingWorkspace() {
   const [customerId, setCustomerId] = useState('');
   const [date, setDate] = useState(today());
   const [lines, setLines] = useState<Array<{ productId: string; quantity: number; pricePerPacketPaise: number }>>([{ productId: '', quantity: 0, pricePerPacketPaise: 0 }]);
-  const [paid, setPaid] = useState(0);
+  const [paymentEntries, setPaymentEntries] = useState<Array<{ type: storage.PaymentType; amountRupees: string }>>([{ type: 'Cash', amountRupees: '' }]);
+  const [editingInvoice, setEditingInvoice] = useState<storage.SaleInvoice | null>(null);
   const [discountRupees, setDiscountRupees] = useState('0');
   const [extraChargesRupees, setExtraChargesRupees] = useState('0');
   const [extraChargesNote, setExtraChargesNote] = useState('');
-  const [paymentType, setPaymentType] = useState<storage.PaymentType>('Cash');
   const [summaryDetailType, setSummaryDetailType] = useState<storage.PaymentType | null>(null);
   const [lastInvoice, setLastInvoice] = useState<any>(null);
   const [viewingInvoice, setViewingInvoice] = useState<any>(null);
 
   const selected = customerId ? data.customers.find(c => c.id === customerId) : null;
   const totalPaise = lines.reduce((sum, line) => sum + (line.quantity * line.pricePerPacketPaise), 0);
+  const paid = paymentEntries.reduce((s, e) => s + Math.round(Number(e.amountRupees || 0) * 100), 0);
   const discountPaise = Math.round(Number(discountRupees || 0) * 100);
   const extraChargePaise = Math.round(Number(extraChargesRupees || 0) * 100);
   const finalTotalPaise = totalPaise - discountPaise + extraChargePaise;
@@ -1412,6 +1419,23 @@ export function BillingWorkspace() {
     setStage('add-items');
   }
 
+  function startEditBill(invoice: storage.SaleInvoice) {
+    setEditingInvoice(invoice);
+    setCustomerId(invoice.customerId);
+    setDate(invoice.date);
+    setLines(invoice.lines.map(l => ({ productId: l.productId, quantity: l.quantityPackets, pricePerPacketPaise: l.pricePerPacketPaise })));
+    setDiscountRupees(invoice.discountPaise ? String(invoice.discountPaise / 100) : '0');
+    setExtraChargesRupees(invoice.extraChargePaise ? String(invoice.extraChargePaise / 100) : '0');
+    setExtraChargesNote(invoice.extraChargesNote ?? '');
+    if (invoice.payments?.length) {
+      setPaymentEntries(invoice.payments.map(p => ({ type: p.type, amountRupees: String(p.amountPaise / 100) })));
+    } else {
+      setPaymentEntries([{ type: invoice.paymentType ?? 'Cash', amountRupees: String(invoice.paidPaise / 100) }]);
+    }
+    setStage('add-items');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   function handleConfirmSale(e: FormEvent) {
     e.preventDefault();
     if (!customerId || !selected) return;
@@ -1424,8 +1448,26 @@ export function BillingWorkspace() {
         if (!product) throw new Error('Product not found');
         return { productId: line.productId, productName: product.name, quantityPackets: line.quantity, pricePerPacketPaise: line.pricePerPacketPaise, totalPaise: line.quantity * line.pricePerPacketPaise };
       });
-      const invoice = storage.postSale({ date, customerId, customerName: selected.name, lines: saleLines, totalPaise, discountPaise: discountPaise > 0 ? discountPaise : undefined, extraChargePaise: extraChargePaise > 0 ? extraChargePaise : undefined, extraChargesNote: extraChargesNote.trim() || undefined, finalTotalPaise, paidPaise: paid, outstandingPaise, paymentType, previousOutstandingPaise: selected.outstandingPaise, previousAdvancePaise: selected.advancePaise });
-      setLastInvoice({ ...invoice, customerName: selected.name });
+      const payments: storage.PaymentEntry[] = paymentEntries
+        .filter(e => Number(e.amountRupees) > 0)
+        .map(e => ({ type: e.type, amountPaise: Math.round(Number(e.amountRupees) * 100) }));
+      const primaryType = payments[0]?.type ?? 'Cash';
+      const invoiceData = {
+        date, customerId, customerName: selected.name,
+        lines: saleLines, totalPaise,
+        discountPaise: discountPaise > 0 ? discountPaise : undefined,
+        extraChargePaise: extraChargePaise > 0 ? extraChargePaise : undefined,
+        extraChargesNote: extraChargesNote.trim() || undefined,
+        finalTotalPaise, paidPaise: paid, outstandingPaise,
+        payments: payments.length > 0 ? payments : undefined,
+        paymentType: primaryType,
+        previousOutstandingPaise: editingInvoice?.previousOutstandingPaise ?? selected.outstandingPaise,
+        previousAdvancePaise: editingInvoice?.previousAdvancePaise ?? selected.advancePaise,
+      };
+      const result = editingInvoice
+        ? storage.updateSaleInvoice(editingInvoice.id, invoiceData)
+        : storage.postSale(invoiceData);
+      setLastInvoice({ ...result, customerName: selected.name });
     });
 
     if (ok) setStage('preview');
@@ -1435,11 +1477,11 @@ export function BillingWorkspace() {
     setCustomerId('');
     setStage('select-customer');
     setLines([{ productId: '', quantity: 0, pricePerPacketPaise: 0 }]);
-    setPaid(0);
+    setPaymentEntries([{ type: 'Cash', amountRupees: '' }]);
     setDiscountRupees('0');
     setExtraChargesRupees('0');
     setExtraChargesNote('');
-    setPaymentType('Cash');
+    setEditingInvoice(null);
     setLastInvoice(null);
     setViewingInvoice(null);
   }
@@ -1450,8 +1492,19 @@ export function BillingWorkspace() {
     const todayBilledPaise = todaySales.reduce((s, inv) => s + (inv.finalTotalPaise ?? inv.totalPaise), 0);
     const todayReceivedPaise = todaySales.reduce((s, inv) => s + inv.paidPaise, 0);
     const byType: Record<storage.PaymentType, number> = { UPI: 0, Cash: 0, Card: 0, Other: 0 };
-    for (const inv of todaySales) byType[inv.paymentType ?? 'Cash'] += inv.paidPaise;
-    const detailSales = summaryDetailType ? todaySales.filter(inv => (inv.paymentType ?? 'Cash') === summaryDetailType) : [];
+    for (const inv of todaySales) {
+      if (inv.payments?.length) {
+        for (const p of inv.payments) byType[p.type] += p.amountPaise;
+      } else {
+        byType[inv.paymentType ?? 'Cash'] += inv.paidPaise;
+      }
+    }
+    const detailSales = summaryDetailType
+      ? todaySales.filter(inv => {
+          if (inv.payments?.length) return inv.payments.some(p => p.type === summaryDetailType);
+          return (inv.paymentType ?? 'Cash') === summaryDetailType;
+        })
+      : [];
     const PAYMENT_ICONS: Record<storage.PaymentType, string> = { UPI: '📲', Cash: '💵', Card: '💳', Other: '•' };
 
     return <>
@@ -1531,7 +1584,7 @@ export function BillingWorkspace() {
       const billContent = generateBillContent(viewingInvoice);
       return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">View bill</h2></div><section className="im-panel" style={{ textAlign: 'center' }}><div className="bill-preview">{billContent}</div><BillActions invoice={viewingInvoice} /><button className="im-primary" style={{ marginTop: '8px' }} onClick={() => setViewingInvoice(null)}>← Back to customer</button></section></>;
     }
-    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">{selected.name} <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--muted)' }}>({selected.type})</span></h2></div><section className="im-panel"><h3 style={{ marginTop: 0, marginBottom: '16px' }}>New bill</h3><form onSubmit={(e) => { e.preventDefault(); setStage('confirm'); }}><div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}><label style={{ flex: 1 }}>Date<input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label><button type="button" className="im-secondary" onClick={() => { setCustomerId(''); setStage('select-customer'); }}>Change customer</button></div><div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Qty</th><th>Price/Packet</th><th>Total</th><th /></tr></thead><tbody>{lines.map((line, idx) => { const product = data.products.find(p => p.id === line.productId); return <tr key={idx}><td><select value={line.productId} onChange={(e) => { const p = data.products.find(x => x.id === e.target.value); setLines(lines.map((l, i) => i === idx ? { ...l, productId: e.target.value, pricePerPacketPaise: p ? priceForCustomer(p) : 0 } : l)); }}><option value="">Select…</option>{data.products.map((p) => { const piStock = p.productionItemId ? storage.getProductionItemStock(p.productionItemId) : null; let label = ''; if (piStock != null) { if (piStock > 0) { const kgOrTray = (piStock / (p.count ?? 1)).toLocaleString('en-IN', { maximumFractionDigits: 2 }); const unit = p.conversionUnit ?? 'KG'; label = ` (${kgOrTray} ${unit} · ${piStock} pcs)`; } else { label = ' (out)'; } } return <option key={p.id} value={p.id}>{p.name}{label}</option>; })}</select></td><td><input type="number" min="0" step="1" value={line.quantity} onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: Number(e.target.value) } : l))} /></td><td>{money(line.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{money(line.quantity * line.pricePerPacketPaise)}</td><td>{lines.length > 1 && <button type="button" className="im-remove" onClick={() => setLines(lines.filter((_, i) => i !== idx))}>×</button>}</td></tr>; })}</tbody></table></div><button type="button" className="im-secondary" onClick={() => setLines([...lines, { productId: '', quantity: 0, pricePerPacketPaise: 0 }])}>+ Add line</button><button type="submit" className="im-primary ml-5">Continue to payment</button></form></section><section className="im-panel" style={{ marginTop: '24px' }}><div className="im-panel-title"><h2>Bill history</h2><span>{customerSalesHistory.length} total</span></div>{customerSalesHistory.length === 0 ? <div className="im-empty"><b>No bills yet</b><p>Bills will appear here once you generate sales for this customer.</p></div> : <div style={{ display: 'grid', gap: '10px' }}>{customerSalesHistory.map((sale) => <div key={sale.id} style={{ border: '1px solid var(--line)', borderRadius: '8px', padding: '12px 14px', background: '#fbfcf8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{sale.date}</div><small style={{ color: 'var(--muted)', fontSize: '12px' }}>{sale.lines.length} item{sale.lines.length === 1 ? '' : 's'} · {money(sale.totalPaise)}</small></div><div style={{ display: 'flex', gap: '6px' }}><button type="button" className="im-secondary" style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 600 }} onClick={() => setViewingInvoice(sale)}>View</button><button type="button" style={{ background: 'transparent', border: '1px solid var(--line)', borderRadius: '4px', padding: '6px 12px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', color: 'var(--muted)' }} onClick={() => { setViewingInvoice(sale); setTimeout(() => window.print(), 100); }}>Print</button></div></div>)}</div>}</section></>;
+    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">{selected.name} <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--muted)' }}>({selected.type})</span></h2></div><section className="im-panel"><h3 style={{ marginTop: 0, marginBottom: '16px' }}>{editingInvoice ? 'Edit bill' : 'New bill'}</h3>{editingInvoice && (<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff8ec', border: '1px solid #f2c48d', borderRadius: '10px', padding: '10px 16px', marginBottom: '16px' }}><span style={{ font: '600 13px DM Sans', color: '#a05a00' }}>Editing bill #{editingInvoice.id.slice(0, 8).toUpperCase()}</span><button type="button" className="im-secondary" style={{ fontSize: '12px' }} onClick={newBill}>✕ Cancel edit</button></div>)}<form onSubmit={(e) => { e.preventDefault(); setStage('confirm'); }}><div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}><label style={{ flex: 1 }}>Date<input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label><button type="button" className="im-secondary" onClick={() => { setCustomerId(''); setStage('select-customer'); }}>Change customer</button></div><div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Qty</th><th>Price/Packet</th><th>Total</th><th /></tr></thead><tbody>{lines.map((line, idx) => { const product = data.products.find(p => p.id === line.productId); return <tr key={idx}><td><select value={line.productId} onChange={(e) => { const p = data.products.find(x => x.id === e.target.value); setLines(lines.map((l, i) => i === idx ? { ...l, productId: e.target.value, pricePerPacketPaise: p ? priceForCustomer(p) : 0 } : l)); }}><option value="">Select…</option>{data.products.map((p) => { const piStock = p.productionItemId ? storage.getProductionItemStock(p.productionItemId) : null; let label = ''; if (piStock != null) { if (piStock > 0) { const kgOrTray = (piStock / (p.count ?? 1)).toLocaleString('en-IN', { maximumFractionDigits: 2 }); const unit = p.conversionUnit ?? 'KG'; label = ` (${kgOrTray} ${unit} · ${piStock} pcs)`; } else { label = ' (out)'; } } return <option key={p.id} value={p.id}>{p.name}{label}</option>; })}</select></td><td><input type="number" min="0" step="1" value={line.quantity} onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: Number(e.target.value) } : l))} /></td><td>{money(line.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{money(line.quantity * line.pricePerPacketPaise)}</td><td>{lines.length > 1 && <button type="button" className="im-remove" onClick={() => setLines(lines.filter((_, i) => i !== idx))}>×</button>}</td></tr>; })}</tbody></table></div><button type="button" className="im-secondary" onClick={() => setLines([...lines, { productId: '', quantity: 0, pricePerPacketPaise: 0 }])}>+ Add line</button><button type="submit" className="im-primary ml-5">Continue to payment</button></form></section><section className="im-panel" style={{ marginTop: '24px' }}><div className="im-panel-title"><h2>Bill history</h2><span>{customerSalesHistory.length} total</span></div>{customerSalesHistory.length === 0 ? <div className="im-empty"><b>No bills yet</b><p>Bills will appear here once you generate sales for this customer.</p></div> : <div style={{ display: 'grid', gap: '10px' }}>{customerSalesHistory.map((sale) => <div key={sale.id} style={{ border: '1px solid var(--line)', borderRadius: '8px', padding: '12px 14px', background: '#fbfcf8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{sale.date}</div><small style={{ color: 'var(--muted)', fontSize: '12px' }}>{sale.lines.length} item{sale.lines.length === 1 ? '' : 's'} · {money(sale.totalPaise)}</small></div><div style={{ display: 'flex', gap: '6px' }}><button type="button" className="im-secondary" style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 600 }} onClick={() => startEditBill(sale)}>Edit</button><button type="button" className="im-secondary" style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 600 }} onClick={() => setViewingInvoice(sale)}>View</button><button type="button" style={{ background: 'transparent', border: '1px solid var(--line)', borderRadius: '4px', padding: '6px 12px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', color: 'var(--muted)' }} onClick={() => { setViewingInvoice(sale); setTimeout(() => window.print(), 100); }}>Print</button></div></div>)}</div>}</section></>;
   }
 
   if (stage === 'confirm' && selected) {
@@ -1579,16 +1632,28 @@ export function BillingWorkspace() {
               {netPaise !== 0 ? `${money(Math.abs(netPaise))} ${netPaise > 0 ? 'due' : 'adv'}` : '—'}
             </strong>
 
-            <label style={{ margin: 0 }}>Customer pays now (₹)</label>
-            <input type="number" min="0" step="0.01" value={paid / 100} onChange={(e) => setPaid(Math.round(Number(e.target.value) * 100))} style={{ textAlign: 'right', width: '100%' }} />
-
-            <label style={{ margin: 0 }}>Payment Type</label>
-            <select value={paymentType} onChange={e => setPaymentType(e.target.value as storage.PaymentType)} style={{ width: '100%' }}>
-              <option value="Cash">Cash</option>
-              <option value="UPI">UPI</option>
-              <option value="Card">Card</option>
-              <option value="Other">Other</option>
-            </select>
+            <div style={{ gridColumn: '1/-1', borderTop: '1px solid #e0dcd8', paddingTop: '12px', marginTop: '4px' }}>
+              <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>Payment received</p>
+              {paymentEntries.map((entry, idx) => (
+                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '130px 1fr 36px', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                  <select value={entry.type} onChange={e => setPaymentEntries(paymentEntries.map((pe, i) => i === idx ? { ...pe, type: e.target.value as storage.PaymentType } : pe))}>
+                    <option value="Cash">Cash</option>
+                    <option value="UPI">UPI</option>
+                    <option value="Card">Card</option>
+                    <option value="Other">Other</option>
+                  </select>
+                  <input type="number" min="0" step="0.01" placeholder="Amount (₹)"
+                    value={entry.amountRupees}
+                    onChange={e => setPaymentEntries(paymentEntries.map((pe, i) => i === idx ? { ...pe, amountRupees: e.target.value } : pe))}
+                    style={{ textAlign: 'right' }} />
+                  <button type="button" className="im-remove" title="Remove"
+                    onClick={() => paymentEntries.length > 1 ? setPaymentEntries(paymentEntries.filter((_, i) => i !== idx)) : setPaymentEntries([{ type: 'Cash', amountRupees: '' }])}>×</button>
+                </div>
+              ))}
+              <button type="button" className="im-secondary" style={{ marginTop: '4px', fontSize: '12px' }}
+                onClick={() => setPaymentEntries([...paymentEntries, { type: 'UPI', amountRupees: '' }])}>+ Add payment method</button>
+              {paid > 0 && <p style={{ marginTop: '8px', fontSize: '13px', fontWeight: 600 }}>Total paid: {money(paid)}</p>}
+            </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
             <button type="button" className="im-secondary" onClick={() => setStage('add-items')}>← Back</button>

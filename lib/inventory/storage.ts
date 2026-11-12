@@ -42,6 +42,7 @@ export type Customer = { id: string; name: string; phone: string; type: 'wholesa
 export type Employee = { id: string; name: string; phone: string; advancePaise: number; duePaise: number; openingAdvancePaise: number; openingDuePaise: number };
 export type SaleLine = { productId: string; productName: string; quantityPackets: number; pricePerPacketPaise: number; totalPaise: number };
 export type PaymentType = 'UPI' | 'Cash' | 'Card' | 'Other';
+export type PaymentEntry = { type: PaymentType; amountPaise: number };
 export type SaleInvoice = {
   id: string;
   date: string;
@@ -55,6 +56,7 @@ export type SaleInvoice = {
   finalTotalPaise?: number;
   paidPaise: number;
   outstandingPaise: number;
+  payments?: PaymentEntry[];
   paymentType?: PaymentType;
   previousOutstandingPaise?: number;
   previousAdvancePaise?: number;
@@ -565,6 +567,57 @@ export function postSale(input: Omit<SaleInvoice, 'id'>) {
 
 export function getSalesForDate(date: string) {
   return getData().saleInvoices.filter(inv => inv.date === date).sort((a, b) => b.id.localeCompare(a.id));
+}
+
+export function updateSaleInvoice(invoiceId: string, input: Omit<SaleInvoice, 'id'>) {
+  const data = getData();
+  const oldInv = data.saleInvoices.find(inv => inv.id === invoiceId);
+  if (!oldInv) throw new Error('Invoice not found.');
+  const customer = data.customers.find(c => c.id === oldInv.customerId);
+  if (!customer) throw new Error('Customer not found.');
+
+  // Reverse old invoice's customer balance contribution
+  const reversedNet = customer.outstandingPaise - customer.advancePaise - oldInv.outstandingPaise;
+  if (reversedNet >= 0) { customer.outstandingPaise = reversedNet; customer.advancePaise = 0; }
+  else { customer.outstandingPaise = 0; customer.advancePaise = -reversedNet; }
+
+  // Remove old stock movements for this invoice
+  data.stockMovements = data.stockMovements.filter(m => m.sourceId !== invoiceId);
+
+  // Stock check for new lines
+  const neededByPi: Record<string, number> = {};
+  for (const line of input.lines) {
+    const product = data.products.find(p => p.id === line.productId);
+    if (product?.productionItemId)
+      neededByPi[product.productionItemId] = (neededByPi[product.productionItemId] ?? 0) + line.quantityPackets * (product.piecesPerPacket ?? 1);
+  }
+  for (const [piId, needed] of Object.entries(neededByPi)) {
+    const available = getProductionItemStockFromData(data, piId);
+    if (available < needed) {
+      const pi = data.productionItems.find(p => p.id === piId);
+      throw new Error(`Insufficient stock for ${pi?.name ?? piId} (need ${needed} pcs, have ${available} pcs)`);
+    }
+  }
+
+  // Update invoice in place (keep same id)
+  Object.assign(oldInv, input);
+
+  // Create new stock movements
+  for (const line of input.lines) {
+    const product = data.products.find(p => p.id === line.productId);
+    if (product?.productionItemId) {
+      const quantityPieces = line.quantityPackets * (product.piecesPerPacket ?? 1);
+      data.stockMovements.push({ id: id(), date: input.date, productionItemId: product.productionItemId, quantityPieces, movementType: 'SALE', sourceId: invoiceId });
+    }
+  }
+
+  // Apply new balance contribution
+  const netDue = customer.outstandingPaise - customer.advancePaise + input.outstandingPaise;
+  if (netDue >= 0) { customer.outstandingPaise = netDue; customer.advancePaise = 0; }
+  else { customer.outstandingPaise = 0; customer.advancePaise = -netDue; }
+
+  save(data);
+  return oldInv;
 }
 
 // ========== EMPLOYEES ==========
