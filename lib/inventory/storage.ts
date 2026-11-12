@@ -41,10 +41,27 @@ export type ProductionBatch = {
 export type Customer = { id: string; name: string; phone: string; type: 'wholesaler' | 'retailer'; outstandingPaise: number; advancePaise: number };
 export type Employee = { id: string; name: string; phone: string; advancePaise: number; duePaise: number; openingAdvancePaise: number; openingDuePaise: number };
 export type SaleLine = { productId: string; productName: string; quantityPackets: number; pricePerPacketPaise: number; totalPaise: number };
-export type SaleInvoice = { id: string; date: string; customerId: string; customerName: string; lines: SaleLine[]; totalPaise: number; paidPaise: number; outstandingPaise: number; previousOutstandingPaise?: number; previousAdvancePaise?: number };
+export type PaymentType = 'UPI' | 'Cash' | 'Card' | 'Other';
+export type SaleInvoice = {
+  id: string;
+  date: string;
+  customerId: string;
+  customerName: string;
+  lines: SaleLine[];
+  totalPaise: number;
+  discountPaise?: number;
+  extraChargePaise?: number;
+  extraChargesNote?: string;
+  finalTotalPaise?: number;
+  paidPaise: number;
+  outstandingPaise: number;
+  paymentType?: PaymentType;
+  previousOutstandingPaise?: number;
+  previousAdvancePaise?: number;
+};
 export type StockMovement = { id: string; date: string; productionItemId: string; quantityPieces: number; movementType: 'PRODUCTION' | 'SALE'; sourceId: string };
 
-export type ExpenseCategory = 'salary' | 'petrol' | 'courier' | 'cover-packing' | 'tea' | 'other';
+export type ExpenseCategory = 'salary' | 'petrol' | 'courier' | 'cover-packing' | 'tea' | 'electricity' | 'other';
 export type Expense = {
   id: string;
   date: string;

@@ -1279,16 +1279,26 @@ ${dash}
   const prevDue     = invoice.previousOutstandingPaise ?? 0;
   const prevAdv     = invoice.previousAdvancePaise ?? 0;
   const hasPrev     = prevDue > 0 || prevAdv > 0;
-  const grandTotal  = invoice.totalPaise + prevDue - prevAdv;
+  const disc        = invoice.discountPaise ?? 0;
+  const extra       = invoice.extraChargePaise ?? 0;
+  const finalTotal  = invoice.finalTotalPaise ?? invoice.totalPaise;
+  const grandTotal  = finalTotal + prevDue - prevAdv;
   const netOut      = grandTotal - invoice.paidPaise;
 
   const fmt = (n: number) => `₹${(Math.abs(n) / 100).toFixed(2)}`.padStart(30);
 
   let summaryLines = `Subtotal    :${fmt(invoice.totalPaise)}\n`;
+  if (disc > 0)    summaryLines += `Discount    :${fmt(disc)}\n`;
+  if (extra > 0) {
+    const noteLabel = invoice.extraChargesNote ? `Extra(${invoice.extraChargesNote.substring(0, 8)})` : 'Extra Chg  ';
+    summaryLines += `${noteLabel.padEnd(12)}:${fmt(extra)}\n`;
+  }
+  if (disc > 0 || extra > 0) summaryLines += `Net Total   :${fmt(finalTotal)}\n`;
   if (prevDue > 0) summaryLines += `Old due     :${fmt(prevDue)}\n`;
   if (prevAdv > 0) summaryLines += `Old advance :${fmt(prevAdv)}\n`;
-  if (hasPrev)     summaryLines += `Total       :${fmt(grandTotal)}\n`;
+  if (hasPrev)     summaryLines += `Grand Total :${fmt(grandTotal)}\n`;
   summaryLines += `Amount Paid :${fmt(invoice.paidPaise)}\n`;
+  summaryLines += `Paid Via    :${(invoice.paymentType ?? 'Cash').padStart(30)}\n`;
   summaryLines += `Outstanding :${(netOut <= 0 ? `₹${(Math.abs(netOut) / 100).toFixed(2)} adv` : `₹${(netOut / 100).toFixed(2)}`).padStart(30)}`;
 
   content += `${dash}
@@ -1375,13 +1385,21 @@ export function BillingWorkspace() {
   const [date, setDate] = useState(today());
   const [lines, setLines] = useState<Array<{ productId: string; quantity: number; pricePerPacketPaise: number }>>([{ productId: '', quantity: 0, pricePerPacketPaise: 0 }]);
   const [paid, setPaid] = useState(0);
+  const [discountRupees, setDiscountRupees] = useState('0');
+  const [extraChargesRupees, setExtraChargesRupees] = useState('0');
+  const [extraChargesNote, setExtraChargesNote] = useState('');
+  const [paymentType, setPaymentType] = useState<storage.PaymentType>('Cash');
+  const [summaryDetailType, setSummaryDetailType] = useState<storage.PaymentType | null>(null);
   const [lastInvoice, setLastInvoice] = useState<any>(null);
   const [viewingInvoice, setViewingInvoice] = useState<any>(null);
 
   const selected = customerId ? data.customers.find(c => c.id === customerId) : null;
   const totalPaise = lines.reduce((sum, line) => sum + (line.quantity * line.pricePerPacketPaise), 0);
-  const outstandingPaise = totalPaise - paid;
-  const netPaise = totalPaise + (selected?.outstandingPaise ?? 0) - (selected?.advancePaise ?? 0) - paid;
+  const discountPaise = Math.round(Number(discountRupees || 0) * 100);
+  const extraChargePaise = Math.round(Number(extraChargesRupees || 0) * 100);
+  const finalTotalPaise = totalPaise - discountPaise + extraChargePaise;
+  const outstandingPaise = finalTotalPaise - paid;
+  const netPaise = finalTotalPaise + (selected?.outstandingPaise ?? 0) - (selected?.advancePaise ?? 0) - paid;
 
   function priceForCustomer(product: storage.Product): number {
     if (selected?.type === 'wholesaler' && product.wholesalePricePerPacketPaise != null) return product.wholesalePricePerPacketPaise;
@@ -1406,7 +1424,7 @@ export function BillingWorkspace() {
         if (!product) throw new Error('Product not found');
         return { productId: line.productId, productName: product.name, quantityPackets: line.quantity, pricePerPacketPaise: line.pricePerPacketPaise, totalPaise: line.quantity * line.pricePerPacketPaise };
       });
-      const invoice = storage.postSale({ date, customerId, customerName: selected.name, lines: saleLines, totalPaise, paidPaise: paid, outstandingPaise, previousOutstandingPaise: selected.outstandingPaise, previousAdvancePaise: selected.advancePaise });
+      const invoice = storage.postSale({ date, customerId, customerName: selected.name, lines: saleLines, totalPaise, discountPaise: discountPaise > 0 ? discountPaise : undefined, extraChargePaise: extraChargePaise > 0 ? extraChargePaise : undefined, extraChargesNote: extraChargesNote.trim() || undefined, finalTotalPaise, paidPaise: paid, outstandingPaise, paymentType, previousOutstandingPaise: selected.outstandingPaise, previousAdvancePaise: selected.advancePaise });
       setLastInvoice({ ...invoice, customerName: selected.name });
     });
 
@@ -1418,13 +1436,93 @@ export function BillingWorkspace() {
     setStage('select-customer');
     setLines([{ productId: '', quantity: 0, pricePerPacketPaise: 0 }]);
     setPaid(0);
+    setDiscountRupees('0');
+    setExtraChargesRupees('0');
+    setExtraChargesNote('');
+    setPaymentType('Cash');
     setLastInvoice(null);
     setViewingInvoice(null);
   }
 
 
   if (stage === 'select-customer') {
-    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Customer sales</h2></div><section className="im-panel"><form onSubmit={handleAddCustomer}><label>Select customer<select required value={customerId} onChange={(e) => setCustomerId(e.target.value)}><option value="">Choose a customer…</option>{data.customers.map((c) => <option key={c.id} value={c.id}>{c.name}{c.outstandingPaise > 0 ? ` (₹${(c.outstandingPaise / 100).toFixed(0)} due)` : ''}</option>)}</select></label><button type="submit" className="im-primary">Next</button></form></section></>;
+    const todaySales = storage.getSalesForDate(today());
+    const todayBilledPaise = todaySales.reduce((s, inv) => s + (inv.finalTotalPaise ?? inv.totalPaise), 0);
+    const todayReceivedPaise = todaySales.reduce((s, inv) => s + inv.paidPaise, 0);
+    const byType: Record<storage.PaymentType, number> = { UPI: 0, Cash: 0, Card: 0, Other: 0 };
+    for (const inv of todaySales) byType[inv.paymentType ?? 'Cash'] += inv.paidPaise;
+    const detailSales = summaryDetailType ? todaySales.filter(inv => (inv.paymentType ?? 'Cash') === summaryDetailType) : [];
+    const PAYMENT_ICONS: Record<storage.PaymentType, string> = { UPI: '📲', Cash: '💵', Card: '💳', Other: '•' };
+
+    return <>
+      <Feedback notice={notice} error={error} />
+      <div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Customer sales</h2></div>
+      <section className="im-panel">
+        <form onSubmit={handleAddCustomer}>
+          <label>Select customer
+            <select required value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+              <option value="">Choose a customer…</option>
+              {data.customers.map((c) => <option key={c.id} value={c.id}>{c.name}{c.outstandingPaise > 0 ? ` (₹${(c.outstandingPaise / 100).toFixed(0)} due)` : ''}</option>)}
+            </select>
+          </label>
+          <button type="submit" className="im-primary">Next</button>
+        </form>
+      </section>
+
+      <div className="exp-section" style={{ marginTop: '8px' }}>
+        <div className="exp-section-head exp-head-history">
+          <div className="exp-section-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+            Today&apos;s Payment Summary
+          </div>
+          <span style={{ fontSize: '12px', color: 'var(--muted)' }}>{todaySales.length} bill{todaySales.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div className="exp-section-body">
+          <div className="im-summary-grid" style={{ margin: 0 }}>
+            <article>
+              <span>Total Billed</span>
+              <strong>{todayBilledPaise > 0 ? money(todayBilledPaise) : '—'}</strong>
+            </article>
+            <article className={todayReceivedPaise > 0 ? 'positive' : ''}>
+              <span>Total Received</span>
+              <strong>{todayReceivedPaise > 0 ? money(todayReceivedPaise) : '—'}</strong>
+            </article>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px' }}>
+            {(['Cash', 'UPI', 'Card', 'Other'] as const).map(pt => {
+              const amt = byType[pt];
+              const isActive = summaryDetailType === pt;
+              return (
+                <button key={pt} type="button" onClick={() => setSummaryDetailType(isActive ? null : pt)}
+                  style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '12px', border: `1px solid ${isActive ? 'var(--coffee)' : 'var(--line)'}`, borderRadius: '8px', background: isActive ? '#fdf5ec' : '#fff', cursor: amt > 0 ? 'pointer' : 'default', textAlign: 'left' }}>
+                  <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em' }}>{PAYMENT_ICONS[pt]} {pt}</span>
+                  <strong style={{ fontSize: '15px', color: amt > 0 ? 'var(--ink)' : 'var(--muted)' }}>{amt > 0 ? money(amt) : '—'}</strong>
+                </button>
+              );
+            })}
+          </div>
+          {summaryDetailType && detailSales.length > 0 && (
+            <div style={{ borderTop: '1px solid var(--line)', paddingTop: '12px' }}>
+              <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '8px' }}>{summaryDetailType} transactions today</p>
+              <table className="exp-hist-table">
+                <thead><tr><th>Customer</th><th>Items</th><th>Billed</th><th>Paid</th><th>Date</th></tr></thead>
+                <tbody>
+                  {detailSales.map(inv => (
+                    <tr key={inv.id}>
+                      <td className="exp-hist-name">{inv.customerName}</td>
+                      <td className="exp-hist-meta">{inv.lines.length} item{inv.lines.length !== 1 ? 's' : ''}</td>
+                      <td>{money(inv.finalTotalPaise ?? inv.totalPaise)}</td>
+                      <td style={{ fontWeight: 600 }}>{money(inv.paidPaise)}</td>
+                      <td className="exp-hist-meta">{inv.date}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </>;
   }
 
   if (stage === 'add-items' && selected) {
@@ -1437,7 +1535,68 @@ export function BillingWorkspace() {
   }
 
   if (stage === 'confirm' && selected) {
-    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Confirm & pay</h2></div><section className="im-panel"><form onSubmit={handleConfirmSale}><div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>{lines.filter(l => l.productId).map((line, idx) => { const product = data.products.find(p => p.id === line.productId); return <tr key={idx}><td>{product?.name}</td><td>{line.quantity}</td><td>{money(line.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{money(line.quantity * line.pricePerPacketPaise)}</td></tr>; })}</tbody></table></div><div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: '10px 16px', alignItems: 'center', marginTop: '16px', padding: '16px', background: '#f5f5f5', borderRadius: '4px' }}><span>Total</span><strong style={{ textAlign: 'right', fontSize: '18px' }}>{money(totalPaise)}</strong><span>Old advance / due</span><span style={{ textAlign: 'right' }}>{selected.outstandingPaise > 0 ? <span style={{ color: '#a43932' }}>{money(selected.outstandingPaise)} due</span> : selected.advancePaise > 0 ? <span style={{ color: '#2e7d32' }}>{money(selected.advancePaise)} adv</span> : <span style={{ color: '#666' }}>—</span>}</span><span>Outstanding</span><strong style={{ textAlign: 'right', fontSize: '16px', color: netPaise > 0 ? '#a43932' : netPaise < 0 ? '#2e7d32' : '#666' }}>{netPaise !== 0 ? `${money(Math.abs(netPaise))} ${netPaise > 0 ? 'due' : 'adv'}` : '—'}</strong><label style={{ margin: 0 }}>Customer pays now (₹)</label><input type="number" min="0" step="0.01" value={paid / 100} onChange={(e) => setPaid(Math.round(Number(e.target.value) * 100))} style={{ textAlign: 'right', width: '100%' }} /></div><div style={{ display: 'flex', gap: '8px' }}><button type="button" className="im-secondary" onClick={() => setStage('add-items')}>← Back</button><button type="submit" className="im-primary">Generate bill</button></div></form></section></>;
+    return <>
+      <Feedback notice={notice} error={error} />
+      <div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">Confirm & pay</h2></div>
+      <section className="im-panel">
+        <form onSubmit={handleConfirmSale}>
+          <div className="im-table-scroll">
+            <table>
+              <thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
+              <tbody>
+                {lines.filter(l => l.productId).map((line, idx) => {
+                  const product = data.products.find(p => p.id === line.productId);
+                  return <tr key={idx}><td>{product?.name}</td><td>{line.quantity}</td><td>{money(line.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{money(line.quantity * line.pricePerPacketPaise)}</td></tr>;
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px', gap: '10px 16px', alignItems: 'center', marginTop: '16px', padding: '16px', background: '#f5f5f5', borderRadius: '4px' }}>
+            <span>Subtotal</span>
+            <strong style={{ textAlign: 'right', fontSize: '18px' }}>{money(totalPaise)}</strong>
+
+            <label style={{ margin: 0 }}>Discount (₹)</label>
+            <input type="number" min="0" step="0.01" value={discountRupees} onChange={e => setDiscountRupees(e.target.value)} style={{ textAlign: 'right', width: '100%' }} />
+
+            <label style={{ margin: 0 }}>Extra Charges (₹)</label>
+            <input type="number" min="0" step="0.01" value={extraChargesRupees} onChange={e => setExtraChargesRupees(e.target.value)} style={{ textAlign: 'right', width: '100%' }} />
+
+            <label style={{ margin: 0, fontSize: '12px', color: 'var(--muted)' }}>Extra Charges Note</label>
+            <input type="text" value={extraChargesNote} onChange={e => setExtraChargesNote(e.target.value)} placeholder="e.g. Delivery fee" style={{ width: '100%' }} />
+
+            {(discountPaise > 0 || extraChargePaise > 0) && <>
+              <span style={{ fontWeight: 600 }}>Final Total</span>
+              <strong style={{ textAlign: 'right', fontSize: '18px', color: 'var(--coffee)' }}>{money(finalTotalPaise)}</strong>
+            </>}
+
+            <span>Old advance / due</span>
+            <span style={{ textAlign: 'right' }}>
+              {selected.outstandingPaise > 0 ? <span style={{ color: '#a43932' }}>{money(selected.outstandingPaise)} due</span> : selected.advancePaise > 0 ? <span style={{ color: '#2e7d32' }}>{money(selected.advancePaise)} adv</span> : <span style={{ color: '#666' }}>—</span>}
+            </span>
+
+            <span>Outstanding</span>
+            <strong style={{ textAlign: 'right', fontSize: '16px', color: netPaise > 0 ? '#a43932' : netPaise < 0 ? '#2e7d32' : '#666' }}>
+              {netPaise !== 0 ? `${money(Math.abs(netPaise))} ${netPaise > 0 ? 'due' : 'adv'}` : '—'}
+            </strong>
+
+            <label style={{ margin: 0 }}>Customer pays now (₹)</label>
+            <input type="number" min="0" step="0.01" value={paid / 100} onChange={(e) => setPaid(Math.round(Number(e.target.value) * 100))} style={{ textAlign: 'right', width: '100%' }} />
+
+            <label style={{ margin: 0 }}>Payment Type</label>
+            <select value={paymentType} onChange={e => setPaymentType(e.target.value as storage.PaymentType)} style={{ width: '100%' }}>
+              <option value="Cash">Cash</option>
+              <option value="UPI">UPI</option>
+              <option value="Card">Card</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+            <button type="button" className="im-secondary" onClick={() => setStage('add-items')}>← Back</button>
+            <button type="submit" className="im-primary">Generate bill</button>
+          </div>
+        </form>
+      </section>
+    </>;
   }
 
   if (stage === 'preview' && lastInvoice) {

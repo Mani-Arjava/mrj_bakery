@@ -16,6 +16,7 @@ const CATEGORY_LABELS: Record<storage.ExpenseCategory, string> = {
   courier: 'Courier',
   'cover-packing': 'Cover & Packing',
   tea: 'Tea',
+  electricity: 'Electricity',
   other: 'Other',
 };
 
@@ -24,6 +25,7 @@ const OTHER_CATS: Array<{ value: storage.ExpenseCategory; label: string }> = [
   { value: 'courier', label: 'Courier' },
   { value: 'cover-packing', label: 'Cover & Packing' },
   { value: 'tea', label: 'Tea' },
+  { value: 'electricity', label: 'Electricity' },
   { value: 'other', label: 'Other' },
 ];
 
