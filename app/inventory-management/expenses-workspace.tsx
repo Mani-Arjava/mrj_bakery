@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useRef, useState } from 'react';
 import * as storage from '@/lib/inventory/storage';
 import { useSimpleInventory, Feedback } from './simple-workspaces';
 import './simple.css';
@@ -60,22 +60,18 @@ function StatusBadge({ expense }: { expense: storage.Expense }) {
 }
 
 export default function ExpensesWorkspace() {
-  const { run, notice, error } = useSimpleInventory();
+  const { data, run, notice, error } = useSimpleInventory();
   const formRef = useRef<HTMLDivElement>(null);
 
   const [selectedDate, setSelectedDate] = useState(today());
-  const [expenses, setExpenses] = useState<storage.Expense[]>([]);
-  const [employees, setEmployees] = useState<storage.Employee[]>([]);
   const [activeTab, setActiveTab] = useState<'all' | 'salary' | 'other'>('all');
 
   const [salaryDrafts, setSalaryDrafts] = useState<SalaryDraft[]>([emptySalary()]);
   const [otherDrafts, setOtherDrafts] = useState<OtherDraft[]>([emptyOther()]);
   const [editingExpense, setEditingExpense] = useState<storage.Expense | null>(null);
 
-  useEffect(() => {
-    setExpenses(storage.getExpensesByDate(selectedDate));
-    setEmployees(storage.getAllEmployees());
-  }, [notice, error, selectedDate]);
+  const expenses = storage.getExpensesByDate(data, selectedDate);
+  const employees = data.employees;
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   const salaryTotal = expenses.filter(e => e.category === 'salary').reduce((s, e) => s + e.amountPaise, 0);
@@ -116,7 +112,7 @@ export default function ExpensesWorkspace() {
   }
 
   // ── Save ──────────────────────────────────────────────────────────────────
-  function handleSave(e: FormEvent) {
+  async function handleSave(e: FormEvent) {
     e.preventDefault();
 
     if (editingExpense) {
@@ -128,7 +124,7 @@ export default function ExpensesWorkspace() {
         const givenPaise = Math.round(Number(row.givenSalary) * 100);
         if (givenPaise <= 0) return;
         const emp = employees.find(e => e.id === row.employeeId);
-        const ok = run(() => storage.updateExpense(editingExpense.id, {
+        const ok = await run(async () => storage.updateExpense(editingExpense.id, {
           date: selectedDate, category: 'salary',
           amountPaise: givenPaise, actualAmountPaise: actualPaise,
           employeeId: row.employeeId, employeeName: emp?.name || '',
@@ -140,7 +136,7 @@ export default function ExpensesWorkspace() {
         const amountPaise = Math.round(Number(row.amount) * 100);
         if (amountPaise <= 0) return;
         if (row.category === 'other' && !row.customName.trim()) return;
-        const ok = run(() => storage.updateExpense(editingExpense.id, {
+        const ok = await run(async () => storage.updateExpense(editingExpense.id, {
           date: selectedDate, category: row.category, amountPaise,
           customName: row.category === 'other' ? row.customName.trim() : undefined,
           note: row.note.trim() || undefined,
@@ -161,25 +157,25 @@ export default function ExpensesWorkspace() {
 
     if (validSalary.length === 0 && validOther.length === 0) return;
 
-    run(() => {
-      validSalary.forEach(row => {
+    await run(async () => {
+      for (const row of validSalary) {
         const emp = employees.find(e => e.id === row.employeeId);
-        storage.addExpense({
+        await storage.addExpense({
           date: selectedDate, category: 'salary',
           amountPaise: Math.round(Number(row.givenSalary) * 100),
           actualAmountPaise: Math.round(Number(row.actualSalary) * 100),
           employeeId: row.employeeId, employeeName: emp?.name || '',
           note: row.note.trim() || undefined,
         });
-      });
-      validOther.forEach(row => {
-        storage.addExpense({
+      }
+      for (const row of validOther) {
+        await storage.addExpense({
           date: selectedDate, category: row.category,
           amountPaise: Math.round(Number(row.amount) * 100),
           customName: row.category === 'other' ? row.customName.trim() : undefined,
           note: row.note.trim() || undefined,
         });
-      });
+      }
     });
     resetForm();
   }
@@ -212,7 +208,7 @@ export default function ExpensesWorkspace() {
       ? `salary expense for ${expense.employeeName}`
       : expense.customName || CATEGORY_LABELS[expense.category];
     if (window.confirm(`Delete this ${label} expense?`)) {
-      run(() => storage.deleteExpense(expense.id));
+      run(async () => storage.deleteExpense(expense.id));
     }
   }
 

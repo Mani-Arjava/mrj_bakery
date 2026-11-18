@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import * as storage from '@/lib/inventory/storage';
 import { Feedback, useSimpleInventory } from './simple-workspaces';
 import './simple.css';
@@ -22,19 +22,11 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 export default function PLWorkspace() {
-  const { notice, error } = useSimpleInventory();
+  const { data, notice, error } = useSimpleInventory();
   const [selectedDate, setSelectedDate] = useState(today());
-  const [summary, setSummary] = useState<storage.PLDaySummary | null>(null);
-  const [history, setHistory] = useState<storage.PLDaySummary[]>([]);
 
-  useEffect(() => {
-    setSummary(storage.getPLSummary(selectedDate));
-  }, [selectedDate, notice, error]);
-
-  useEffect(() => {
-    const dates = storage.getPLDates();
-    setHistory(dates.map(d => storage.getPLSummary(d)));
-  }, [notice, error]);
+  const summary = storage.getPLSummary(data, selectedDate);
+  const history = storage.getPLDates(data).map(d => storage.getPLSummary(data, d));
 
   const s = summary;
   const isProfit = (s?.profitPaise ?? 0) >= 0;

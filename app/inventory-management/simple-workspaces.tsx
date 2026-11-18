@@ -12,16 +12,29 @@ const money = (paise: number) => new Intl.NumberFormat('en-IN', { style: 'curren
 type Mode = 'cards' | 'table';
 
 export function useSimpleInventory() {
-  const [data, setData] = useState<storage.InventoryData>({ suppliers: [], items: [], purchases: [], products: [], productionItems: [], recipes: [], productionBatches: [], customers: [], employees: [], saleInvoices: [], stockMovements: [], expenses: [] });
+  const [data, setData] = useState<storage.InventoryData>(storage.emptyData());
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
-  const refresh = () => setData(storage.getData());
-  useEffect(() => { storage.initStorage(); refresh(); }, []);
-  function run(action: () => void) {
-    try { setError(''); action(); refresh(); setNotice('Saved successfully'); window.setTimeout(() => setNotice(''), 2500); return true; }
-    catch (err) { setError(err instanceof Error ? err.message : 'Unable to save'); return false; }
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    return storage.subscribeToInventory(newData => {
+      setData(newData);
+      setLoading(false);
+    });
+  }, []);
+  async function run<T>(action: () => Promise<T>): Promise<T | false> {
+    try {
+      setError('');
+      const result = await action();
+      setNotice('Saved successfully');
+      window.setTimeout(() => setNotice(''), 2500);
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to save');
+      return false;
+    }
   }
-  return { data, run, refresh, notice, error };
+  return { data, run, loading, notice, error };
 }
 
 export function Feedback({ notice, error }: { notice: string; error: string }) {
@@ -62,19 +75,19 @@ export function SuppliersWorkspace() {
 
   function openCreate() { setEditing(null); setForm({ name: '', address: '', contactPerson: '', phone: '', openingPendingPaise: '', openingAdvancePaise: '' }); setShowForm(true); }
   function openEdit(supplier: storage.Supplier) { setEditing(supplier); setForm({ name: supplier.name, address: supplier.address, contactPerson: supplier.contactPerson, phone: supplier.phone, openingPendingPaise: '', openingAdvancePaise: '' }); setShowForm(true); }
-  function submit(event: FormEvent) { event.preventDefault(); if (!form.name.trim()) return; run(() => editing ? storage.updateSupplier(editing.id, { name: form.name.trim(), address: form.address, contactPerson: form.contactPerson, phone: form.phone, openingPendingPaise: editing.openingPendingPaise ?? 0, openingAdvancePaise: editing.openingAdvancePaise ?? 0 }) : storage.addSupplier({ name: form.name.trim(), address: form.address, contactPerson: form.contactPerson, phone: form.phone, openingPendingPaise: Math.round(Number(form.openingPendingPaise || 0) * 100), openingAdvancePaise: Math.round(Number(form.openingAdvancePaise || 0) * 100) })); setEditing(null); setShowForm(false); }
-  function remove(supplier: storage.Supplier) { if (window.confirm(`Delete ${supplier.name}?`)) run(() => storage.deleteSupplier(supplier.id)); }
+  function submit(event: FormEvent) { event.preventDefault(); if (!form.name.trim()) return; run(async () => editing ? storage.updateSupplier(editing.id, { name: form.name.trim(), address: form.address, contactPerson: form.contactPerson, phone: form.phone, openingPendingPaise: editing.openingPendingPaise ?? 0, openingAdvancePaise: editing.openingAdvancePaise ?? 0 }) : storage.addSupplier({ name: form.name.trim(), address: form.address, contactPerson: form.contactPerson, phone: form.phone, openingPendingPaise: Math.round(Number(form.openingPendingPaise || 0) * 100), openingAdvancePaise: Math.round(Number(form.openingAdvancePaise || 0) * 100) })); setEditing(null); setShowForm(false); }
+  function remove(supplier: storage.Supplier) { if (window.confirm(`Delete ${supplier.name}?`)) run(async () => storage.deleteSupplier(data, supplier.id)); }
 
   if (selected) {
-    const summary = storage.getSupplierSummary(selected.id);
+    const summary = storage.getSupplierSummary(data, selected.id);
     return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><button className="im-secondary" onClick={() => setSelectedId(null)}>← All suppliers</button><div className="action-group"><button className="im-secondary" onClick={() => openEdit(selected)}>Edit supplier</button><button className="action-delete standalone-delete" onClick={() => remove(selected)}>Delete supplier</button><button className="im-primary" onClick={openCreate}>+ Add supplier</button></div></div><section className="im-detail-hero"><div className="im-avatar large">{selected.name.slice(0, 1).toUpperCase()}</div><div><p className="im-kicker">SUPPLIER</p><h2>{selected.name}</h2><p>{[selected.contactPerson, selected.phone, selected.address].filter(Boolean).join(' · ') || 'No contact details added'}</p></div></section><div className="im-summary-grid"><article><span>Total purchase</span><strong>{money(summary.totalPurchasePaise)}</strong></article><article><span>Paid / settled</span><strong>{money(summary.totalPaidPaise)}</strong></article><article className={summary.pendingPaise ? 'warning' : ''}><span>Pending</span><strong>{money(summary.pendingPaise)}</strong></article><article className={summary.advancePaise ? 'positive' : ''}><span>Advance / credit</span><strong>{money(summary.advancePaise)}</strong></article></div><section className="im-panel im-history-panel"><div className="im-panel-title"><h2>Purchase & payment history</h2><span>{summary.purchases.length} records</span></div>{summary.purchases.length === 0 ? <div className="im-empty"><b>No purchases yet</b><p>Purchases recorded for this supplier will appear here.</p></div> : <div className="im-table-scroll"><table><thead><tr><th>Date</th><th>Items</th><th>Purchase</th><th>Paid</th><th>Status</th></tr></thead><tbody>{summary.purchases.map((purchase) => { const balance = purchase.totalPaise - purchase.paidPaise; return <tr key={purchase.id}><td>{purchase.date}</td><td>{purchase.lines.length}</td><td>{money(purchase.totalPaise)}</td><td>{money(purchase.paidPaise)}</td><td><span className={balance < 0 ? 'credit' : balance > 0 ? 'due' : 'settled'}>{balance < 0 ? `${money(Math.abs(balance))} advance` : balance > 0 ? `${money(balance)} pending` : 'Settled'}</span></td></tr>; })}</tbody></table></div>}</section>{showForm && <SupplierForm form={form} setForm={setForm} submit={submit} close={() => { setEditing(null); setShowForm(false); }} editing={!!editing} />}</>;
   }
 
-  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">SUPPLIERS</p><h2 className="im-page-title">Shops you buy from</h2></div><div className="action-group"><ViewToggle mode={mode} setMode={setMode} /><button className="im-primary" onClick={openCreate}>+ Add supplier</button></div></div>{data.suppliers.length === 0 ? <Empty title="No suppliers yet" text="Add your first shop or vendor to start recording purchases." action="Add supplier" onAction={openCreate} /> : mode === 'table' ? <SupplierTable suppliers={data.suppliers} open={setSelectedId} edit={openEdit} remove={remove} /> : <div className="im-party-grid">{data.suppliers.map((supplier) => { const summary = storage.getSupplierSummary(supplier.id); return <article className="im-party-card supplier-card" key={supplier.id}><button className="card-open" onClick={() => setSelectedId(supplier.id)}><div className="supplier-info-rows"><span className="supplier-row-label">Shop</span><span className="supplier-row-value">{supplier.name}</span>{supplier.contactPerson && <><span className="supplier-row-label">Contact</span><span className="supplier-row-value">{supplier.contactPerson}</span></>}{supplier.phone && <><span className="supplier-row-label">Phone</span><span className="supplier-row-value">{supplier.phone}</span></>}<span className="supplier-row-label">Purchase</span><span className="supplier-row-value">{money(summary.totalPurchasePaise)}</span><span className="supplier-row-label">Status</span><Status summary={summary} /></div></button><SupplierActions edit={() => openEdit(supplier)} remove={() => remove(supplier)} /></article>; })}</div>}{showForm && <SupplierForm form={form} setForm={setForm} submit={submit} close={() => { setEditing(null); setShowForm(false); }} editing={!!editing} />}</>;
+  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">SUPPLIERS</p><h2 className="im-page-title">Shops you buy from</h2></div><div className="action-group"><ViewToggle mode={mode} setMode={setMode} /><button className="im-primary" onClick={openCreate}>+ Add supplier</button></div></div>{data.suppliers.length === 0 ? <Empty title="No suppliers yet" text="Add your first shop or vendor to start recording purchases." action="Add supplier" onAction={openCreate} /> : mode === 'table' ? <SupplierTable suppliers={data.suppliers} data={data} open={setSelectedId} edit={openEdit} remove={remove} /> : <div className="im-party-grid">{data.suppliers.map((supplier) => { const summary = storage.getSupplierSummary(data, supplier.id); return <article className="im-party-card supplier-card" key={supplier.id}><button className="card-open" onClick={() => setSelectedId(supplier.id)}><div className="supplier-info-rows"><span className="supplier-row-label">Shop</span><span className="supplier-row-value">{supplier.name}</span>{supplier.contactPerson && <><span className="supplier-row-label">Contact</span><span className="supplier-row-value">{supplier.contactPerson}</span></>}{supplier.phone && <><span className="supplier-row-label">Phone</span><span className="supplier-row-value">{supplier.phone}</span></>}<span className="supplier-row-label">Purchase</span><span className="supplier-row-value">{money(summary.totalPurchasePaise)}</span><span className="supplier-row-label">Status</span><Status summary={summary} /></div></button><SupplierActions edit={() => openEdit(supplier)} remove={() => remove(supplier)} /></article>; })}</div>}{showForm && <SupplierForm form={form} setForm={setForm} submit={submit} close={() => { setEditing(null); setShowForm(false); }} editing={!!editing} />}</>;
 }
 
-function SupplierTable({ suppliers, open, edit, remove }: { suppliers: storage.Supplier[]; open: (id: string) => void; edit: (supplier: storage.Supplier) => void; remove: (supplier: storage.Supplier) => void }) {
-  return <div className="im-panel im-table-scroll"><table><thead><tr><th>Supplier</th><th>Contact</th><th>Purchase</th><th>Paid</th><th>Balance</th><th>Actions</th></tr></thead><tbody>{suppliers.map((supplier) => { const summary = storage.getSupplierSummary(supplier.id); return <tr key={supplier.id}><td><button className="table-link" onClick={() => open(supplier.id)}>{supplier.name}</button></td><td>{supplier.contactPerson || supplier.phone || '—'}</td><td>{money(summary.totalPurchasePaise)}</td><td>{money(summary.totalPaidPaise)}</td><td><Status summary={summary} /></td><td><SupplierActions edit={() => edit(supplier)} remove={() => remove(supplier)} /></td></tr>; })}</tbody></table></div>;
+function SupplierTable({ suppliers, data, open, edit, remove }: { suppliers: storage.Supplier[]; data: storage.InventoryData; open: (id: string) => void; edit: (supplier: storage.Supplier) => void; remove: (supplier: storage.Supplier) => void }) {
+  return <div className="im-panel im-table-scroll"><table><thead><tr><th>Supplier</th><th>Contact</th><th>Purchase</th><th>Paid</th><th>Balance</th><th>Actions</th></tr></thead><tbody>{suppliers.map((supplier) => { const summary = storage.getSupplierSummary(data, supplier.id); return <tr key={supplier.id}><td><button className="table-link" onClick={() => open(supplier.id)}>{supplier.name}</button></td><td>{supplier.contactPerson || supplier.phone || '—'}</td><td>{money(summary.totalPurchasePaise)}</td><td>{money(summary.totalPaidPaise)}</td><td><Status summary={summary} /></td><td><SupplierActions edit={() => edit(supplier)} remove={() => remove(supplier)} /></td></tr>; })}</tbody></table></div>;
 }
 
 type ItemFormValue = { name: string; unit: string };
@@ -84,8 +97,8 @@ function ItemForm({ form, setForm, submit, close, editing }: { form: ItemFormVal
 
 function ItemActions({ edit, remove, history }: { edit: () => void; remove: () => void; history?: () => void }) { return <div className="row-actions">{history && <button className="action-history" onClick={history}>₹</button>}<button className="action-edit" onClick={edit}>Edit</button><button className="action-delete" onClick={remove}>Delete</button></div>; }
 
-function ItemPriceHistoryModal({ item, onClose }: { item: storage.InventoryItem; onClose: () => void }) {
-  const history = storage.getItemPurchaseRateHistory(item.id);
+function ItemPriceHistoryModal({ item, data, onClose }: { item: storage.InventoryItem; data: storage.InventoryData; onClose: () => void }) {
+  const history = storage.getItemPurchaseRateHistory(data, item.id);
   const currentRate = history.length ? history[history.length - 1].unitRatePaise : 0;
   return (
     <div className="im-modal-backdrop" onClick={onClose}>
@@ -215,13 +228,13 @@ export function ItemsWorkspace() {
   const [historyItem, setHistoryItem] = useState<storage.InventoryItem | null>(null);
   function openCreate() { setEditing(null); setForm({ name: '', unit: 'Kg' }); setShowForm(true); }
   function openEdit(item: storage.InventoryItem) { setEditing(item); setForm({ name: item.name, unit: item.unit }); setShowForm(true); }
-  function submit(event: FormEvent) { event.preventDefault(); if (!form.name.trim()) return; run(() => editing ? storage.updateItem(editing.id, { ...form, name: form.name.trim() }) : storage.addItem({ ...form, name: form.name.trim() })); setEditing(null); setShowForm(false); }
-  function remove(item: storage.InventoryItem) { if (window.confirm(`Delete ${item.name}?`)) run(() => storage.deleteItem(item.id)); }
-  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">ITEMS</p><h2 className="im-page-title">Your regular purchases</h2></div><div className="action-group"><ViewToggle mode={mode} setMode={setMode} /><button className="im-primary" onClick={openCreate}>+ Add item</button></div></div>{data.items.length === 0 ? <Empty title="No items yet" text="Create an item to make it available in Purchases." action="Add item" onAction={openCreate} /> : mode === 'table' ? <div className="im-panel im-table-scroll"><table><thead><tr><th>Item</th><th>Unit</th><th>Current stock</th><th>Actions</th></tr></thead><tbody>{data.items.map((item) => <tr key={item.id}><td><b>{item.name}</b></td><td>{item.unit}</td><td className="stock-value">{item.quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })} {item.unit}</td><td><ItemActions edit={() => openEdit(item)} remove={() => remove(item)} history={() => setHistoryItem(item)} /></td></tr>)}</tbody></table></div> : <div className="im-party-grid item-card-grid">{data.items.map((item) => <article className="im-party-card item-card" key={item.id}><div className="supplier-info-rows"><span className="supplier-row-label">Item</span><span className="supplier-row-value">{item.name}</span><span className="supplier-row-label">Unit</span><span className="supplier-row-value">{item.unit}</span><span className="supplier-row-label">Stock</span><span className="supplier-row-value stock-value">{item.quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })} {item.unit}</span></div><ItemActions edit={() => openEdit(item)} remove={() => remove(item)} history={() => setHistoryItem(item)} /></article>)}</div>}{showForm && <ItemForm form={form} setForm={setForm} submit={submit} close={() => { setEditing(null); setShowForm(false); }} editing={!!editing} />}{historyItem && <ItemPriceHistoryModal item={historyItem} onClose={() => setHistoryItem(null)} />}</>;
+  function submit(event: FormEvent) { event.preventDefault(); if (!form.name.trim()) return; run(async () => editing ? storage.updateItem(data, editing.id, { ...form, name: form.name.trim() }) : storage.addItem({ ...form, name: form.name.trim() })); setEditing(null); setShowForm(false); }
+  function remove(item: storage.InventoryItem) { if (window.confirm(`Delete ${item.name}?`)) run(async () => storage.deleteItem(data, item.id)); }
+  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">ITEMS</p><h2 className="im-page-title">Your regular purchases</h2></div><div className="action-group"><ViewToggle mode={mode} setMode={setMode} /><button className="im-primary" onClick={openCreate}>+ Add item</button></div></div>{data.items.length === 0 ? <Empty title="No items yet" text="Create an item to make it available in Purchases." action="Add item" onAction={openCreate} /> : mode === 'table' ? <div className="im-panel im-table-scroll"><table><thead><tr><th>Item</th><th>Unit</th><th>Current stock</th><th>Actions</th></tr></thead><tbody>{data.items.map((item) => <tr key={item.id}><td><b>{item.name}</b></td><td>{item.unit}</td><td className="stock-value">{item.quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })} {item.unit}</td><td><ItemActions edit={() => openEdit(item)} remove={() => remove(item)} history={() => setHistoryItem(item)} /></td></tr>)}</tbody></table></div> : <div className="im-party-grid item-card-grid">{data.items.map((item) => <article className="im-party-card item-card" key={item.id}><div className="supplier-info-rows"><span className="supplier-row-label">Item</span><span className="supplier-row-value">{item.name}</span><span className="supplier-row-label">Unit</span><span className="supplier-row-value">{item.unit}</span><span className="supplier-row-label">Stock</span><span className="supplier-row-value stock-value">{item.quantity.toLocaleString('en-IN', { maximumFractionDigits: 2 })} {item.unit}</span></div><ItemActions edit={() => openEdit(item)} remove={() => remove(item)} history={() => setHistoryItem(item)} /></article>)}</div>}{showForm && <ItemForm form={form} setForm={setForm} submit={submit} close={() => { setEditing(null); setShowForm(false); }} editing={!!editing} />}{historyItem && <ItemPriceHistoryModal item={historyItem} data={data} onClose={() => setHistoryItem(null)} />}</>;
 }
 
 type PurchaseLineDraft = { itemId: string; quantity: string; unit: string; rate: string; total: string };
-function PurchaseEditor({ data, run, refresh, editingPurchase, done }: { data: storage.InventoryData; run: (action: () => void) => boolean; refresh: () => void; editingPurchase: storage.Purchase | null; done: () => void }) {
+function PurchaseEditor({ data, run, editingPurchase, done }: { data: storage.InventoryData; run: <T>(action: () => Promise<T>) => Promise<T | false>; editingPurchase: storage.Purchase | null; done: () => void }) {
   const [supplierId, setSupplierId] = useState(editingPurchase?.supplierId || '');
   const [date, setDate] = useState(editingPurchase?.date || today());
   const [paid, setPaid] = useState(editingPurchase ? String(editingPurchase.paidPaise / 100) : '');
@@ -233,13 +246,13 @@ function PurchaseEditor({ data, run, refresh, editingPurchase, done }: { data: s
     ? lines.reduce((sum, line) => sum + Math.round(Number(line.quantity || 0) * Number(line.rate || 0) * 100), 0)
     : lines.reduce((sum, line) => sum + Math.round(Number(line.total || 0) * 100), 0);
   const paidPaise = Math.round(Number(paid || 0) * 100);
-  const supplierSummary = (supplierId && !editingPurchase) ? storage.getSupplierSummary(supplierId) : null;
+  const supplierSummary = (supplierId && !editingPurchase) ? storage.getSupplierSummary(data, supplierId) : null;
   const prevPendingPaise = supplierSummary?.pendingPaise ?? 0;
   const prevAdvancePaise = supplierSummary?.advancePaise ?? 0;
   const balancePaise = totalPaise + prevPendingPaise - prevAdvancePaise - paidPaise;
   function updateLine(index: number, updates: Partial<PurchaseLineDraft>) { setLines(lines.map((line, lineIndex) => lineIndex === index ? { ...line, ...updates } : line)); }
-  function addInlineItem() { if (!newItem.name.trim()) return; const item = storage.addItem({ name: newItem.name.trim(), unit: newItem.unit }); refresh(); setNewItem({ name: '', unit: 'Kg' }); setShowNewItem(false); setLines((current) => { const blank = current.findIndex((line) => !line.itemId); if (blank >= 0) return current.map((line, index) => index === blank ? { ...line, itemId: item.id, unit: item.unit } : line); return [...current, { itemId: item.id, quantity: '', unit: item.unit, rate: '', total: '' }]; }); }
-  function submit(event: FormEvent) { event.preventDefault(); const valid = lines.filter((line) => line.itemId && Number(line.quantity) > 0 && (entryMode === 'rate' ? Number(line.rate) >= 0 : Number(line.total) > 0)); if (!supplierId || !valid.length || totalPaise <= 0) return; const success = run(() => { const prepared = valid.map((line) => { const item = data.items.find((candidate) => candidate.id === line.itemId); if (!item) throw new Error('Please select a valid item.'); const lineTotal = entryMode === 'rate' ? Math.round(Number(line.quantity) * Number(line.rate) * 100) : Math.round(Number(line.total) * 100); const unitPricePaise = entryMode === 'rate' ? Math.round(Number(line.rate) * 100) : (Number(line.quantity) > 0 ? Math.round(lineTotal / Number(line.quantity)) : 0); return { itemId: item.id, itemName: item.name, quantity: Number(line.quantity), unit: line.unit, unitPricePaise, totalPaise: lineTotal }; }); const input = { date, supplierId, lines: prepared, totalPaise, paidPaise }; if (editingPurchase) storage.updatePurchase(editingPurchase.id, input); else storage.postPurchase(input); }); if (success) done(); }
+  async function addInlineItem() { if (!newItem.name.trim()) return; const item = await storage.addItem({ name: newItem.name.trim(), unit: newItem.unit }); setNewItem({ name: '', unit: 'Kg' }); setShowNewItem(false); setLines((current) => { const blank = current.findIndex((line) => !line.itemId); if (blank >= 0) return current.map((line, index) => index === blank ? { ...line, itemId: item.id, unit: item.unit } : line); return [...current, { itemId: item.id, quantity: '', unit: item.unit, rate: '', total: '' }]; }); }
+  async function submit(event: FormEvent) { event.preventDefault(); const valid = lines.filter((line) => line.itemId && Number(line.quantity) > 0 && (entryMode === 'rate' ? Number(line.rate) >= 0 : Number(line.total) > 0)); if (!supplierId || !valid.length || totalPaise <= 0) return; const success = await run(async () => { const prepared = valid.map((line) => { const item = data.items.find((candidate) => candidate.id === line.itemId); if (!item) throw new Error('Please select a valid item.'); const lineTotal = entryMode === 'rate' ? Math.round(Number(line.quantity) * Number(line.rate) * 100) : Math.round(Number(line.total) * 100); const unitPricePaise = entryMode === 'rate' ? Math.round(Number(line.rate) * 100) : (Number(line.quantity) > 0 ? Math.round(lineTotal / Number(line.quantity)) : 0); return { itemId: item.id, itemName: item.name, quantity: Number(line.quantity), unit: line.unit, unitPricePaise, totalPaise: lineTotal }; }); const input = { date, supplierId, lines: prepared, totalPaise, paidPaise }; if (editingPurchase) return storage.updatePurchase(editingPurchase.id, input, data); else return storage.postPurchase(input, data); }); if (success) done(); }
   return <section className="im-panel purchase-editor"><div className="im-purchase-header"><div><h2>{editingPurchase ? 'Edit purchase' : 'New purchase'}</h2><p className="im-muted">Add stock and settle the supplier in one quick entry.</p></div><label>Date<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label><div className="view-toggle"><button type="button" className={entryMode==='rate'?'active':''} onClick={()=>setEntryMode('rate')}>Rate-based</button><button type="button" className={entryMode==='total'?'active':''} onClick={()=>setEntryMode('total')}>Total-based</button></div></div><form onSubmit={submit}><div className="im-two"><label>Supplier<select required value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">Select supplier…</option>{data.suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label><div className="purchase-balance-note"><div><span>This purchase</span><strong>{money(totalPaise)}</strong></div>{prevPendingPaise > 0 && <div><span>Prev. pending</span><strong style={{color:'#b45309'}}>+{money(prevPendingPaise)}</strong></div>}{prevAdvancePaise > 0 && <div><span>Prev. advance</span><strong style={{color:'#1d4ed8'}}>−{money(prevAdvancePaise)}</strong></div>}{(prevPendingPaise > 0 || prevAdvancePaise > 0) && <div><span>Net to settle</span><strong>{money(Math.max(0, totalPaise + prevPendingPaise - prevAdvancePaise))}</strong></div>}</div></div><div className="im-purchase-lines"><div className="im-line-head"><span>Item</span><span>Qty</span><span>Unit</span><span>{entryMode==='rate'?'Rate (₹)':'Total (₹)'}</span><span>{entryMode==='rate'?'Total':'Rate'}</span><span /></div>{lines.map((line, index) => <div className="im-purchase-line" key={index}><select required value={line.itemId} onChange={(e) => { const item = data.items.find((candidate) => candidate.id === e.target.value); updateLine(index, { itemId: e.target.value, unit: item?.unit || line.unit }); }}><option value="">Select item…</option>{data.items.map((item) => <option key={item.id} value={item.id} disabled={lines.some((l, i) => i !== index && l.itemId === item.id)}>{item.name}</option>)}</select><input required type="number" min="0.01" step="0.01" value={line.quantity} onChange={(e) => updateLine(index, { quantity: e.target.value })} placeholder="0" /><select value={line.unit} onChange={(e) => updateLine(index, { unit: e.target.value })}>{UNITS.map((unit) => <option key={unit}>{unit}</option>)}</select>{entryMode==='rate' ? <input required type="number" min="0" step="0.01" value={line.rate} onChange={(e) => updateLine(index, { rate: e.target.value })} placeholder="0" /> : <input required type="number" min="0.01" step="0.01" value={line.total} onChange={(e) => updateLine(index, { total: e.target.value })} placeholder="0" />}{entryMode==='rate' ? <b>{money(Math.round(Number(line.quantity||0)*Number(line.rate||0)*100))}</b> : <b>{Number(line.quantity||0)>0 ? money(Math.round(Number(line.total||0)*100/Number(line.quantity))) : '—'}</b>}<button type="button" className="im-remove" onClick={() => lines.length > 1 ? setLines(lines.filter((_, lineIndex) => lineIndex !== index)) : setLines([{itemId:'',quantity:'',unit:'Kg',rate:'',total:''}])}>×</button></div>)}</div><div className="purchase-actions"><button type="button" className="im-text-button" onClick={() => setLines([...lines, { itemId: '', quantity: '', unit: 'Kg', rate: '', total: '' }])}>+ Add item</button><button type="button" className="im-text-button" onClick={() => setShowNewItem(!showNewItem)}>+ New item</button></div>{showNewItem && <div className="inline-item-form"><label>Item name<input required autoFocus value={newItem.name} onChange={(e) => setNewItem({ ...newItem, name: e.target.value })} placeholder="e.g. Sugar" /></label><label>Unit<select value={newItem.unit} onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })}>{UNITS.map((unit) => <option key={unit}>{unit}</option>)}</select></label><button className="im-primary" type="button" onClick={addInlineItem}>Add to purchase</button></div>}<div className="purchase-total-row"><label>Amount paid (₹)<input type="number" min="0" step="0.01" value={paid} onChange={(e) => setPaid(e.target.value)} placeholder="0" /></label><div><span>Purchase amount</span><strong>{money(totalPaise)}</strong></div><div className={balancePaise < 0 ? 'credit' : balancePaise > 0 ? 'due' : 'settled'}><span>{balancePaise < 0 ? 'Advance / credit' : balancePaise > 0 ? 'Pending' : 'Settlement'}</span><strong>{money(Math.abs(balancePaise))}</strong></div><button className="im-primary" type="submit">{editingPurchase ? 'Save changes' : 'Save purchase'}</button></div></form></section>;
 }
 
@@ -247,290 +260,18 @@ function PurchaseStatus({ purchase }: { purchase: storage.Purchase }) { const ba
 function PurchaseActions({ edit, remove }: { edit: () => void; remove: () => void }) { return <div className="row-actions"><button className="action-edit" onClick={edit}>Edit</button><button className="action-delete" onClick={remove}>Delete</button></div>; }
 
 export function PurchasesWorkspace() {
-  const { data, run, refresh, notice, error } = useSimpleInventory();
+  const { data, run, notice, error } = useSimpleInventory();
   const [mode, setMode] = useState<Mode>('cards');
   const [editing, setEditing] = useState<storage.Purchase | null>(null);
   const [showEditor, setShowEditor] = useState(true);
-  function remove(purchase: storage.Purchase) { if (window.confirm(`Delete this purchase from ${purchase.supplierName}? Stock will be reduced.`)) run(() => storage.deletePurchase(purchase.id)); }
+  function remove(purchase: storage.Purchase) { if (window.confirm(`Delete this purchase from ${purchase.supplierName}? Stock will be reduced.`)) run(async () => storage.deletePurchase(purchase.id)); }
   function newPurchase() { setEditing(null); setShowEditor(true); }
   function edit(purchase: storage.Purchase) { setEditing(purchase); setShowEditor(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">PURCHASES</p><h2 className="im-page-title">Record a purchase</h2></div><div className="action-group"><ViewToggle mode={mode} setMode={setMode} /><button className="im-primary" onClick={newPurchase}>+ New purchase</button></div></div>{showEditor && <PurchaseEditor data={data} run={run} refresh={refresh} editingPurchase={editing} done={() => { setEditing(null); setShowEditor(false); }} />}<section className="im-panel purchase-history-panel"><div className="im-panel-title"><h2>Purchase history</h2><span>{data.purchases.length} total</span></div>{data.purchases.length === 0 ? <Empty title="No purchases yet" text="Your saved purchases will appear here." /> : mode === 'table' ? <div className="im-table-scroll"><table><thead><tr><th>Date</th><th>Supplier</th><th>Items</th><th>Purchase</th><th>Paid</th><th>Status</th><th>Actions</th></tr></thead><tbody>{data.purchases.map((purchase) => <tr key={purchase.id}><td>{purchase.date}</td><td><b>{purchase.supplierName}</b></td><td>{purchase.lines.length}</td><td>{money(purchase.totalPaise)}</td><td>{money(purchase.paidPaise)}</td><td><PurchaseStatus purchase={purchase} /></td><td><PurchaseActions edit={() => edit(purchase)} remove={() => remove(purchase)} /></td></tr>)}</tbody></table></div> : <div className="purchase-history">{data.purchases.map((purchase) => <article className="purchase-history-card" key={purchase.id}><div><div><b>{purchase.supplierName}</b><small>{purchase.date} · {purchase.lines.length} item{purchase.lines.length === 1 ? '' : 's'}</small></div><strong>{money(purchase.totalPaise)}</strong></div><ul>{purchase.lines.map((line) => <li key={line.itemId + line.totalPaise}><span>{line.itemName} <small>{line.quantity} {line.unit} × {money(line.unitPricePaise)}</small></span><b>{money(line.totalPaise)}</b></li>)}</ul><footer><span className="im-muted">Paid</span><span>{money(purchase.paidPaise)}</span><span className="im-muted">{purchase.totalPaise - purchase.paidPaise > 0 ? 'Pending' : purchase.totalPaise - purchase.paidPaise < 0 ? 'Advance' : 'Status'}</span><PurchaseStatus purchase={purchase} /></footer><PurchaseActions edit={() => edit(purchase)} remove={() => remove(purchase)} /></article>)}</div>}</section></>;
+  return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><div><p className="im-kicker">PURCHASES</p><h2 className="im-page-title">Record a purchase</h2></div><div className="action-group"><ViewToggle mode={mode} setMode={setMode} /><button className="im-primary" onClick={newPurchase}>+ New purchase</button></div></div>{showEditor && <PurchaseEditor data={data} run={run} editingPurchase={editing} done={() => { setEditing(null); setShowEditor(false); }} />}<section className="im-panel purchase-history-panel"><div className="im-panel-title"><h2>Purchase history</h2><span>{data.purchases.length} total</span></div>{data.purchases.length === 0 ? <Empty title="No purchases yet" text="Your saved purchases will appear here." /> : mode === 'table' ? <div className="im-table-scroll"><table><thead><tr><th>Date</th><th>Supplier</th><th>Items</th><th>Purchase</th><th>Paid</th><th>Status</th><th>Actions</th></tr></thead><tbody>{data.purchases.map((purchase) => <tr key={purchase.id}><td>{purchase.date}</td><td><b>{purchase.supplierName}</b></td><td>{purchase.lines.length}</td><td>{money(purchase.totalPaise)}</td><td>{money(purchase.paidPaise)}</td><td><PurchaseStatus purchase={purchase} /></td><td><PurchaseActions edit={() => edit(purchase)} remove={() => remove(purchase)} /></td></tr>)}</tbody></table></div> : <div className="purchase-history">{data.purchases.map((purchase) => <article className="purchase-history-card" key={purchase.id}><div><div><b>{purchase.supplierName}</b><small>{purchase.date} · {purchase.lines.length} item{purchase.lines.length === 1 ? '' : 's'}</small></div><strong>{money(purchase.totalPaise)}</strong></div><ul>{purchase.lines.map((line) => <li key={line.itemId + line.totalPaise}><span>{line.itemName} <small>{line.quantity} {line.unit} × {money(line.unitPricePaise)}</small></span><b>{money(line.totalPaise)}</b></li>)}</ul><footer><span className="im-muted">Paid</span><span>{money(purchase.paidPaise)}</span><span className="im-muted">{purchase.totalPaise - purchase.paidPaise > 0 ? 'Pending' : purchase.totalPaise - purchase.paidPaise < 0 ? 'Advance' : 'Status'}</span><PurchaseStatus purchase={purchase} /></footer><PurchaseActions edit={() => edit(purchase)} remove={() => remove(purchase)} /></article>)}</div>}</section></>;
 }
 
 export function RecipesWorkspace() { return null; }
 
-// Placeholder — Recipes removed, kept export for any legacy imports
-function _RecipesWorkspaceOld() {
-  const { data, run, notice, error } = useSimpleInventory();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  // Production item form
-  const [showItemForm, setShowItemForm] = useState(false);
-  const [editingItem, setEditingItem] = useState<storage.ProductionItem | null>(null);
-  const [itemForm, setItemForm] = useState({ name: '', productionUnit: 'KG' as 'KG' | 'Tray', piecesPerUnit: '' });
-
-  // Ingredient row drafts
-  const [ingredientDrafts, setIngredientDrafts] = useState<Array<{ itemId: string; quantityPerUnit: string }>>([]);
-  const [editingIngredients, setEditingIngredients] = useState(false);
-
-  const selectedItem = data.productionItems.find(pi => pi.id === selectedId);
-  const selectedRecipe = selectedItem ? data.recipes.find(r => r.productionItemId === selectedItem.id) : undefined;
-
-  function openCreateItem() {
-    setEditingItem(null);
-    setItemForm({ name: '', productionUnit: 'KG', piecesPerUnit: '' });
-    setShowItemForm(true);
-  }
-
-  function openEditItem(item: storage.ProductionItem) {
-    setEditingItem(item);
-    setItemForm({ name: item.name, productionUnit: item.productionUnit ?? 'KG', piecesPerUnit: String(item.piecesPerUnit) });
-    setShowItemForm(true);
-  }
-
-  function submitItem(e: FormEvent) {
-    e.preventDefault();
-    if (!itemForm.name.trim() || !itemForm.piecesPerUnit) return;
-    const payload = { name: itemForm.name.trim(), productionUnit: itemForm.productionUnit, piecesPerUnit: Number(itemForm.piecesPerUnit) };
-    run(() => {
-      if (editingItem) storage.updateProductionItem(editingItem.id, payload);
-      else storage.addProductionItem(payload);
-    });
-    setShowItemForm(false);
-    setEditingItem(null);
-  }
-
-  function removeItem(item: storage.ProductionItem) {
-    if (window.confirm(`Delete ${item.name}? This will also delete its recipe.`)) {
-      run(() => storage.deleteProductionItem(item.id));
-      if (selectedId === item.id) setSelectedId(null);
-    }
-  }
-
-  function startEditIngredients() {
-    const drafts = selectedRecipe
-      ? selectedRecipe.ingredients.map(ing => ({ itemId: ing.itemId, quantityPerUnit: String(ing.quantityPerUnit) }))
-      : [{ itemId: '', quantityPerUnit: '' }];
-    setIngredientDrafts(drafts.length ? drafts : [{ itemId: '', quantityPerUnit: '' }]);
-    setEditingIngredients(true);
-  }
-
-  function saveIngredients() {
-    if (!selectedItem) return;
-    const valid = ingredientDrafts.filter(d => d.itemId && Number(d.quantityPerUnit) > 0);
-    run(() => {
-      if (valid.length === 0) {
-        storage.deleteRecipe(selectedItem.id);
-      } else {
-        const ingredients: storage.RecipeIngredient[] = valid.map(d => {
-          const item = data.items.find(it => it.id === d.itemId)!;
-          return { itemId: item.id, itemName: item.name, quantityPerUnit: Number(d.quantityPerUnit), unit: item.unit };
-        });
-        storage.saveRecipe(selectedItem.id, ingredients);
-      }
-    });
-    setEditingIngredients(false);
-  }
-
-  function updateDraft(index: number, patch: Partial<{ itemId: string; quantityPerUnit: string }>) {
-    setIngredientDrafts(ingredientDrafts.map((d, i) => i === index ? { ...d, ...patch } : d));
-  }
-
-  if (selectedItem) {
-    return <>
-      <Feedback notice={notice} error={error} />
-      <div className="im-section-actions">
-        <button className="im-secondary" onClick={() => { setSelectedId(null); setEditingIngredients(false); }}>← All recipes</button>
-        <div className="action-group">
-          <button className="im-secondary" onClick={() => openEditItem(selectedItem)}>Edit item</button>
-          <button className="action-delete standalone-delete" onClick={() => removeItem(selectedItem)}>Delete item</button>
-        </div>
-      </div>
-
-      <section className="im-panel">
-        <div style={{ marginBottom: '16px' }}>
-          <p className="im-kicker">PRODUCTION ITEM</p>
-          <h2 style={{ margin: '4px 0 2px' }}>{selectedItem.name}</h2>
-          <p style={{ color: 'var(--muted)', margin: 0 }}>
-            Unit: <b>{selectedItem.productionUnit}</b> &nbsp;·&nbsp; 1 {selectedItem.productionUnit} = <b>{selectedItem.piecesPerUnit} pieces</b>
-          </p>
-        </div>
-
-        <div className="im-panel-title" style={{ marginTop: '24px' }}>
-          <h2>Recipe ingredients</h2>
-          {!editingIngredients && (
-            <button className="im-secondary" onClick={startEditIngredients}>
-              {selectedRecipe ? 'Edit recipe' : 'Add recipe'}
-            </button>
-          )}
-        </div>
-
-        {editingIngredients ? (
-          <div>
-            <p className="im-muted" style={{ marginBottom: '12px' }}>
-              Enter quantity of each raw material needed per 1 {selectedItem.productionUnit} of {selectedItem.name}.
-            </p>
-            {data.items.filter(it => it.quantity > 0).length === 0 && (
-              <p className="im-muted" style={{ marginBottom: '12px', color: '#a43932' }}>
-                No items in stock. Purchase items first to add ingredients.
-              </p>
-            )}
-            <div className="ingredient-rows" style={{ marginBottom: '12px' }}>
-              {ingredientDrafts.map((draft, idx) => {
-                const selectedUnit = draft.itemId ? data.items.find(it => it.id === draft.itemId)?.unit : '';
-                return (
-                  <div key={idx} className="ingredient-row">
-                    <select value={draft.itemId} onChange={e => updateDraft(idx, { itemId: e.target.value })}>
-                      <option value="">Select raw material…</option>
-                      {data.items.filter(it => it.quantity > 0).map(it => <option key={it.id} value={it.id}>{it.name} ({it.unit})</option>)}
-                    </select>
-                    <input type="number" min="0.001" step="0.001" value={draft.quantityPerUnit}
-                      onChange={e => updateDraft(idx, { quantityPerUnit: e.target.value })}
-                      placeholder="0" />
-                    <span className="ingredient-unit">{selectedUnit || '—'}</span>
-                    {ingredientDrafts.length > 1 && (
-                      <button type="button" className="ingredient-remove"
-                        onClick={() => setIngredientDrafts(ingredientDrafts.filter((_, i) => i !== idx))}>×</button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button className="im-text-button" type="button" onClick={() => setIngredientDrafts([...ingredientDrafts, { itemId: '', quantityPerUnit: '' }])}>+ Add ingredient</button>
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-                <button className="im-secondary" type="button" onClick={() => setEditingIngredients(false)}>Cancel</button>
-                <button className="im-primary" type="button" onClick={saveIngredients}>Save recipe</button>
-              </div>
-            </div>
-          </div>
-        ) : selectedRecipe && selectedRecipe.ingredients.length > 0 ? (
-          <div className="im-table-scroll">
-            <table>
-              <thead><tr><th>Raw material</th><th>Qty per 1 {selectedItem.productionUnit}</th><th>Unit</th></tr></thead>
-              <tbody>
-                {selectedRecipe.ingredients.map((ing, idx) => (
-                  <tr key={idx}>
-                    <td><b>{ing.itemName}</b></td>
-                    <td>{ing.quantityPerUnit.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
-                    <td>{ing.unit}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <Empty
-            title="No recipe yet"
-            text={`Add the raw materials needed to produce 1 ${selectedItem.productionUnit} of ${selectedItem.name}.`}
-            action="Add recipe"
-            onAction={startEditIngredients}
-          />
-        )}
-      </section>
-
-      {showItemForm && (
-        <div className="im-modal-backdrop">
-          <div className="im-modal">
-            <button className="im-modal-close" onClick={() => setShowItemForm(false)}>×</button>
-            <h2>Edit production item</h2>
-            <form className="im-modal-form" onSubmit={submitItem}>
-              <label>Item name<input autoFocus required value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e.target.value })} /></label>
-              <label>Production unit
-                <select value={itemForm.productionUnit} onChange={e => setItemForm({ ...itemForm, productionUnit: e.target.value as 'KG' | 'Tray' })}>
-                  <option value="KG">KG</option>
-                  <option value="Tray">Tray</option>
-                </select>
-              </label>
-              <label>Pieces per {itemForm.productionUnit}
-                <input required type="number" min="0.01" step="0.01" value={itemForm.piecesPerUnit}
-                  onChange={e => setItemForm({ ...itemForm, piecesPerUnit: e.target.value })}
-                  placeholder="e.g. 25" />
-              </label>
-              <button className="im-primary" type="submit">Save changes</button>
-            </form>
-          </div>
-        </div>
-      )}
-    </>;
-  }
-
-  return <>
-    <Feedback notice={notice} error={error} />
-    <div className="im-section-actions">
-      <div><p className="im-kicker">RECIPES</p><h2 className="im-page-title">Production items & recipes</h2></div>
-      <button className="im-primary" onClick={openCreateItem}>+ Add production item</button>
-    </div>
-
-    {data.productionItems.length === 0 ? (
-      <Empty
-        title="No production items yet"
-        text="Create a production item (e.g. Roll Cake) to define its recipe and track its stock."
-        action="Add production item"
-        onAction={openCreateItem}
-      />
-    ) : (
-      <section className="im-panel">
-        <div className="im-table-scroll">
-          <table>
-            <thead>
-              <tr><th>Production item</th><th>Unit</th><th>Conversion</th><th>Recipe</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
-              {data.productionItems.map(item => {
-                const recipe = data.recipes.find(r => r.productionItemId === item.id);
-                return (
-                  <tr key={item.id}>
-                    <td><button className="table-link" onClick={() => { setSelectedId(item.id); setEditingIngredients(false); }}><b>{item.name}</b></button></td>
-                    <td>{item.productionUnit}</td>
-                    <td>1 {item.productionUnit} = {item.piecesPerUnit} pcs</td>
-                    <td>
-                      {recipe && recipe.ingredients.length > 0
-                        ? <span className="im-status settled">{recipe.ingredients.length} ingredient{recipe.ingredients.length === 1 ? '' : 's'}</span>
-                        : <span className="im-status due">No recipe</span>}
-                    </td>
-                    <td>
-                      <div className="row-actions">
-                        <button className="action-edit" onClick={() => { setSelectedId(item.id); setEditingIngredients(false); }}>View</button>
-                        <button className="action-edit" onClick={() => openEditItem(item)}>Edit</button>
-                        <button className="action-delete" onClick={() => removeItem(item)}>Delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )}
-
-    {showItemForm && (
-      <div className="im-modal-backdrop">
-        <div className="im-modal">
-          <button className="im-modal-close" onClick={() => setShowItemForm(false)}>×</button>
-          <h2>Add production item</h2>
-          <form className="im-modal-form" onSubmit={submitItem}>
-            <label>Item name<input autoFocus required value={itemForm.name} onChange={e => setItemForm({ ...itemForm, name: e.target.value })} placeholder="e.g. Roll Cake" /></label>
-            <label>Production unit
-              <select value={itemForm.productionUnit} onChange={e => setItemForm({ ...itemForm, productionUnit: e.target.value as 'KG' | 'Tray' })}>
-                <option value="KG">KG</option>
-                <option value="Tray">Tray</option>
-              </select>
-            </label>
-            <label>Pieces per {itemForm.productionUnit}
-              <input required type="number" min="0.01" step="0.01" value={itemForm.piecesPerUnit}
-                onChange={e => setItemForm({ ...itemForm, piecesPerUnit: e.target.value })}
-                placeholder="e.g. 25" />
-              <small style={{ color: 'var(--muted)' }}>How many pieces does 1 {itemForm.productionUnit || 'unit'} produce?</small>
-            </label>
-            <button className="im-primary" type="submit">Create production item</button>
-          </form>
-        </div>
-      </div>
-    )}
-  </>;
-}
 
 export function ProductsWorkspace() {
   const { data, run, notice, error } = useSimpleInventory();
@@ -547,9 +288,9 @@ export function ProductsWorkspace() {
     const count = form.count !== '' ? Number(form.count) : undefined;
     const piecesPerPacket = form.piecesPerPacket !== '' ? Number(form.piecesPerPacket) : undefined;
     const productionItemId = form.productionItemId || undefined;
-    run(() => {
-      if (editing) storage.updateProduct(editing.id, { name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale, count, conversionUnit: form.conversionUnit, productionItemId, piecesPerPacket });
-      else storage.addProduct({ name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale, count, conversionUnit: form.conversionUnit, productionItemId, piecesPerPacket });
+    run(async () => {
+      if (editing) return storage.updateProduct(data, editing.id, { name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale, count, conversionUnit: form.conversionUnit, productionItemId, piecesPerPacket });
+      else return storage.addProduct({ name: form.name, pricePerPacketPaise: form.pricePerPacketPaise, wholesalePricePerPacketPaise: wholesale, count, conversionUnit: form.conversionUnit, productionItemId, piecesPerPacket });
     });
     setForm({ name: '', piecesPerPacket: '', count: '', conversionUnit: 'KG', pricePerPacketPaise: 0, wholesalePricePerPacketPaise: '', productionItemId: '' });
     setEditing(null);
@@ -572,7 +313,7 @@ export function ProductsWorkspace() {
   }
 
   function removeProduct(product: storage.Product) {
-    if (window.confirm(`Delete ${product.name}? This cannot be undone.`)) run(() => storage.deleteProduct(product.id));
+    if (window.confirm(`Delete ${product.name}? This cannot be undone.`)) run(async () => storage.deleteProduct(data, product.id));
   }
 
   return <>
@@ -699,9 +440,9 @@ export function ProductionWorkspace() {
     e.preventDefault();
     if (!itemForm.name.trim()) return;
     const payload = { name: itemForm.name.trim(), piecesPerUnit: 1 };
-    run(() => {
-      if (editingItem) storage.updateProductionItem(editingItem.id, payload);
-      else storage.addProductionItem(payload);
+    run(async () => {
+      if (editingItem) return storage.updateProductionItem(editingItem.id, payload);
+      else return storage.addProductionItem(payload);
     });
     setShowItemForm(false);
     setEditingItem(null);
@@ -715,7 +456,7 @@ export function ProductionWorkspace() {
   }
 
   function removeItem(item: storage.ProductionItem) {
-    if (window.confirm(`Delete "${item.name}"?`)) run(() => storage.deleteProductionItem(item.id));
+    if (window.confirm(`Delete "${item.name}"?`)) run(async () => storage.deleteProductionItem(data, item.id));
   }
 
   function resetForm() {
@@ -759,9 +500,9 @@ export function ProductionWorkspace() {
         return { productionItemId: item.id, productionItemName: item.name, quantity: Number(d.quantity), unit };
       });
     const batchData = { date, rawMaterials, productsProduced, notes: notes || undefined };
-    run(() => {
-      if (editingBatch) storage.updateProductionBatch(editingBatch.id, batchData);
-      else storage.addProductionBatch(batchData);
+    run(async () => {
+      if (editingBatch) return storage.updateProductionBatch(editingBatch.id, batchData, data);
+      else return storage.addProductionBatch(batchData, data);
     });
     resetForm();
   }
@@ -785,10 +526,10 @@ export function ProductionWorkspace() {
 
   function removeBatch(batch: storage.ProductionBatch) {
     if (window.confirm('Delete this production record? Raw material stock will be restored.'))
-      run(() => storage.deleteProductionBatch(batch.id));
+      run(async () => storage.deleteProductionBatch(batch.id, data));
   }
 
-  const allProduction = storage.getAllProductionBatches();
+  const allProduction = storage.getAllProductionBatches(data);
 
   const dayBatches = allProduction.filter(b => b.date === date);
   const matTotals: Record<string, { name: string; qty: number; unit: string }> = {};
@@ -814,7 +555,7 @@ export function ProductionWorkspace() {
       const product = data.products.find(p => p.productionItemId === pi.id);
       const count = product?.count ?? 1;
       const unit = product?.conversionUnit ?? 'KG';
-      const pcs = storage.getProductionItemStock(pi.id);
+      const pcs = pi.currentStockPieces ?? 0;
       const qty = count > 0 ? pcs / count : 0;
       return { id: pi.id, name: pi.name, pcs, qty, unit };
     })
@@ -1036,7 +777,7 @@ export function ProductionWorkspace() {
         {allProduction.length > 0 && (
           <div style={{ padding: '10px 16px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end' }}>
             <button type="button" className="action-delete" style={{ fontSize: '11px', padding: '6px 12px' }}
-              onClick={() => { if (window.confirm('Delete ALL production records? This cannot be undone.')) run(() => storage.clearProductionHistory()); }}>
+              onClick={() => { if (window.confirm('Delete ALL production records? This cannot be undone.')) run(async () => storage.clearProductionHistory()); }}>
               Clear all records
             </button>
           </div>
@@ -1126,18 +867,18 @@ export function CustomersWorkspace() {
 
   function openCreate() { setEditing(null); setForm(blankForm()); setShowForm(true); }
   function openEdit(c: storage.Customer) { setEditing(c); setForm({ name: c.name, phone: c.phone, type: c.type, previousBalance: '', previousAdvance: '' }); setShowForm(true); }
-  function remove(c: storage.Customer) { if (window.confirm(`Delete "${c.name}"?`)) run(() => storage.deleteCustomer(c.id)); }
+  function remove(c: storage.Customer) { if (window.confirm(`Delete "${c.name}"?`)) run(async () => storage.deleteCustomer(c.id)); }
 
   function submit(e: FormEvent) {
     e.preventDefault();
     if (!form.name) return;
-    run(() => {
+    run(async () => {
       if (editing) {
-        storage.updateCustomer(editing.id, { name: form.name, phone: form.phone, type: form.type });
+        return storage.updateCustomer(editing.id, { name: form.name, phone: form.phone, type: form.type });
       } else {
         const previousBalancePaise = form.previousBalance !== '' ? Math.round(Number(form.previousBalance) * 100) : undefined;
         const previousAdvancePaise = form.previousAdvance !== '' ? Math.round(Number(form.previousAdvance) * 100) : undefined;
-        storage.addCustomer({ name: form.name, phone: form.phone, type: form.type, previousBalancePaise, previousAdvancePaise });
+        return storage.addCustomer({ name: form.name, phone: form.phone, type: form.type, previousBalancePaise, previousAdvancePaise });
       }
     });
     setEditing(null); setShowForm(false);
@@ -1184,7 +925,7 @@ export function CustomersWorkspace() {
         </section>
         <section className="im-panel" style={{ marginTop: '16px' }}>
           {(() => {
-            const salesHistory = storage.getSalesHistory(selected.id);
+            const salesHistory = storage.getSalesHistory(data, selected.id);
             return <>
               <div className="im-panel-title"><h2>Bill History</h2><span>{salesHistory.length} total</span></div>
               {salesHistory.length === 0
@@ -1385,7 +1126,7 @@ function BillActions({ invoice }: { invoice: any }) {
 }
 
 export function BillingWorkspace() {
-  const { data, run, refresh, notice, error } = useSimpleInventory();
+  const { data, run, notice, error } = useSimpleInventory();
   const [stage, setStage] = useState<'select-customer' | 'add-items' | 'confirm' | 'preview'>('select-customer');
   const [customerId, setCustomerId] = useState('');
   const [date, setDate] = useState(today());
@@ -1436,13 +1177,13 @@ export function BillingWorkspace() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function handleConfirmSale(e: FormEvent) {
+  async function handleConfirmSale(e: FormEvent) {
     e.preventDefault();
     if (!customerId || !selected) return;
     const validLines = lines.filter(l => l.productId && l.quantity > 0);
     if (validLines.length === 0) return;
 
-    const ok = run(() => {
+    const ok = await run(async () => {
       const saleLines = validLines.map(line => {
         const product = data.products.find(p => p.id === line.productId);
         if (!product) throw new Error('Product not found');
@@ -1465,8 +1206,8 @@ export function BillingWorkspace() {
         previousAdvancePaise: editingInvoice?.previousAdvancePaise ?? selected.advancePaise,
       };
       const result = editingInvoice
-        ? storage.updateSaleInvoice(editingInvoice.id, invoiceData)
-        : storage.postSale(invoiceData);
+        ? await storage.updateSaleInvoice(editingInvoice.id, invoiceData, data.products)
+        : await storage.postSale(invoiceData, data.products);
       setLastInvoice({ ...result, customerName: selected.name });
     });
 
@@ -1488,7 +1229,7 @@ export function BillingWorkspace() {
 
 
   if (stage === 'select-customer') {
-    const todaySales = storage.getSalesForDate(today());
+    const todaySales = storage.getSalesForDate(data, today());
     const todayBilledPaise = todaySales.reduce((s, inv) => s + (inv.finalTotalPaise ?? inv.totalPaise), 0);
     const todayReceivedPaise = todaySales.reduce((s, inv) => s + inv.paidPaise, 0);
     const byType: Record<storage.PaymentType, number> = { UPI: 0, Cash: 0, Card: 0, Other: 0 };
@@ -1579,12 +1320,12 @@ export function BillingWorkspace() {
   }
 
   if (stage === 'add-items' && selected) {
-    const customerSalesHistory = storage.getSalesHistory(customerId);
+    const customerSalesHistory = storage.getSalesHistory(data, customerId);
     if (viewingInvoice) {
       const billContent = generateBillContent(viewingInvoice);
       return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">View bill</h2></div><section className="im-panel" style={{ textAlign: 'center' }}><div className="bill-preview">{billContent}</div><BillActions invoice={viewingInvoice} /><button className="im-primary" style={{ marginTop: '8px' }} onClick={() => setViewingInvoice(null)}>← Back to customer</button></section></>;
     }
-    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">{selected.name} <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--muted)' }}>({selected.type})</span></h2></div><section className="im-panel"><h3 style={{ marginTop: 0, marginBottom: '16px' }}>{editingInvoice ? 'Edit bill' : 'New bill'}</h3>{editingInvoice && (<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff8ec', border: '1px solid #f2c48d', borderRadius: '10px', padding: '10px 16px', marginBottom: '16px' }}><span style={{ font: '600 13px DM Sans', color: '#a05a00' }}>Editing bill #{editingInvoice.id.slice(0, 8).toUpperCase()}</span><button type="button" className="im-secondary" style={{ fontSize: '12px' }} onClick={newBill}>✕ Cancel edit</button></div>)}<form onSubmit={(e) => { e.preventDefault(); setStage('confirm'); }}><div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}><label style={{ flex: 1 }}>Date<input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label><button type="button" className="im-secondary" onClick={() => { setCustomerId(''); setStage('select-customer'); }}>Change customer</button></div><div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Qty</th><th>Price/Packet</th><th>Total</th><th /></tr></thead><tbody>{lines.map((line, idx) => { const product = data.products.find(p => p.id === line.productId); return <tr key={idx}><td><select value={line.productId} onChange={(e) => { const p = data.products.find(x => x.id === e.target.value); setLines(lines.map((l, i) => i === idx ? { ...l, productId: e.target.value, pricePerPacketPaise: p ? priceForCustomer(p) : 0 } : l)); }}><option value="">Select…</option>{data.products.map((p) => { const piStock = p.productionItemId ? storage.getProductionItemStock(p.productionItemId) : null; let label = ''; if (piStock != null) { if (piStock > 0) { const kgOrTray = (piStock / (p.count ?? 1)).toLocaleString('en-IN', { maximumFractionDigits: 2 }); const unit = p.conversionUnit ?? 'KG'; label = ` (${kgOrTray} ${unit} · ${piStock} pcs)`; } else { label = ' (out)'; } } return <option key={p.id} value={p.id}>{p.name}{label}</option>; })}</select></td><td><input type="number" min="0" step="1" value={line.quantity} onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: Number(e.target.value) } : l))} /></td><td>{money(line.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{money(line.quantity * line.pricePerPacketPaise)}</td><td>{lines.length > 1 && <button type="button" className="im-remove" onClick={() => setLines(lines.filter((_, i) => i !== idx))}>×</button>}</td></tr>; })}</tbody></table></div><button type="button" className="im-secondary" onClick={() => setLines([...lines, { productId: '', quantity: 0, pricePerPacketPaise: 0 }])}>+ Add line</button><button type="submit" className="im-primary ml-5">Continue to payment</button></form></section><section className="im-panel" style={{ marginTop: '24px' }}><div className="im-panel-title"><h2>Bill history</h2><span>{customerSalesHistory.length} total</span></div>{customerSalesHistory.length === 0 ? <div className="im-empty"><b>No bills yet</b><p>Bills will appear here once you generate sales for this customer.</p></div> : <div style={{ display: 'grid', gap: '10px' }}>{customerSalesHistory.map((sale) => <div key={sale.id} style={{ border: '1px solid var(--line)', borderRadius: '8px', padding: '12px 14px', background: '#fbfcf8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{sale.date}</div><small style={{ color: 'var(--muted)', fontSize: '12px' }}>{sale.lines.length} item{sale.lines.length === 1 ? '' : 's'} · {money(sale.totalPaise)}</small></div><div style={{ display: 'flex', gap: '6px' }}><button type="button" className="im-secondary" style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 600 }} onClick={() => startEditBill(sale)}>Edit</button><button type="button" className="im-secondary" style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 600 }} onClick={() => setViewingInvoice(sale)}>View</button><button type="button" style={{ background: 'transparent', border: '1px solid var(--line)', borderRadius: '4px', padding: '6px 12px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', color: 'var(--muted)' }} onClick={() => { setViewingInvoice(sale); setTimeout(() => window.print(), 100); }}>Print</button></div></div>)}</div>}</section></>;
+    return <><Feedback notice={notice} error={error} /><div className="im-section-actions"><p className="im-kicker">BILLING</p><h2 className="im-page-title">{selected.name} <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--muted)' }}>({selected.type})</span></h2></div><section className="im-panel"><h3 style={{ marginTop: 0, marginBottom: '16px' }}>{editingInvoice ? 'Edit bill' : 'New bill'}</h3>{editingInvoice && (<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff8ec', border: '1px solid #f2c48d', borderRadius: '10px', padding: '10px 16px', marginBottom: '16px' }}><span style={{ font: '600 13px DM Sans', color: '#a05a00' }}>Editing bill #{editingInvoice.id.slice(0, 8).toUpperCase()}</span><button type="button" className="im-secondary" style={{ fontSize: '12px' }} onClick={newBill}>✕ Cancel edit</button></div>)}<form onSubmit={(e) => { e.preventDefault(); setStage('confirm'); }}><div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}><label style={{ flex: 1 }}>Date<input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label><button type="button" className="im-secondary" onClick={() => { setCustomerId(''); setStage('select-customer'); }}>Change customer</button></div><div className="im-table-scroll"><table><thead><tr><th>Product</th><th>Qty</th><th>Price/Packet</th><th>Total</th><th /></tr></thead><tbody>{lines.map((line, idx) => { const product = data.products.find(p => p.id === line.productId); return <tr key={idx}><td><select value={line.productId} onChange={(e) => { const p = data.products.find(x => x.id === e.target.value); setLines(lines.map((l, i) => i === idx ? { ...l, productId: e.target.value, pricePerPacketPaise: p ? priceForCustomer(p) : 0 } : l)); }}><option value="">Select…</option>{data.products.map((p) => { const piStock = p.productionItemId ? (data.productionItems.find(pi => pi.id === p.productionItemId)?.currentStockPieces ?? 0) : null; let label = ''; if (piStock != null) { if (piStock > 0) { const kgOrTray = (piStock / (p.count ?? 1)).toLocaleString('en-IN', { maximumFractionDigits: 2 }); const unit = p.conversionUnit ?? 'KG'; label = ` (${kgOrTray} ${unit} · ${piStock} pcs)`; } else { label = ' (out)'; } } return <option key={p.id} value={p.id} disabled={piStock != null && piStock === 0}>{p.name}{label}</option>; })}</select></td><td><input type="number" min="0" step="1" value={line.quantity} onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: Number(e.target.value) } : l))} /></td><td>{money(line.pricePerPacketPaise)}</td><td style={{ fontWeight: 600 }}>{money(line.quantity * line.pricePerPacketPaise)}</td><td>{lines.length > 1 && <button type="button" className="im-remove" onClick={() => setLines(lines.filter((_, i) => i !== idx))}>×</button>}</td></tr>; })}</tbody></table></div><button type="button" className="im-secondary" onClick={() => setLines([...lines, { productId: '', quantity: 0, pricePerPacketPaise: 0 }])}>+ Add line</button><button type="submit" className="im-primary ml-5">Continue to payment</button></form></section><section className="im-panel" style={{ marginTop: '24px' }}><div className="im-panel-title"><h2>Bill history</h2><span>{customerSalesHistory.length} total</span></div>{customerSalesHistory.length === 0 ? <div className="im-empty"><b>No bills yet</b><p>Bills will appear here once you generate sales for this customer.</p></div> : <div style={{ display: 'grid', gap: '10px' }}>{customerSalesHistory.map((sale) => <div key={sale.id} style={{ border: '1px solid var(--line)', borderRadius: '8px', padding: '12px 14px', background: '#fbfcf8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{sale.date}</div><small style={{ color: 'var(--muted)', fontSize: '12px' }}>{sale.lines.length} item{sale.lines.length === 1 ? '' : 's'} · {money(sale.totalPaise)}</small></div><div style={{ display: 'flex', gap: '6px' }}><button type="button" className="im-secondary" style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 600 }} onClick={() => startEditBill(sale)}>Edit</button><button type="button" className="im-secondary" style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 600 }} onClick={() => setViewingInvoice(sale)}>View</button><button type="button" style={{ background: 'transparent', border: '1px solid var(--line)', borderRadius: '4px', padding: '6px 12px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', color: 'var(--muted)' }} onClick={() => { setViewingInvoice(sale); setTimeout(() => window.print(), 100); }}>Print</button></div></div>)}</div>}</section></>;
   }
 
   if (stage === 'confirm' && selected) {
@@ -1674,21 +1415,15 @@ export function BillingWorkspace() {
 }
 
 export function EmployeesWorkspace() {
-  const { run, notice, error } = useSimpleInventory();
+  const { data, run, notice, error } = useSimpleInventory();
   const [mode, setMode] = useState<Mode>('cards');
   const [showForm, setShowForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<storage.Employee | null>(null);
   const [form, setForm] = useState({ name: '', phone: '', openingAdvance: '', openingDue: '' });
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [employees, setEmployees] = useState<storage.Employee[]>([]);
-  const [salaryHistory, setSalaryHistory] = useState<ReturnType<typeof storage.getEmployeeSalaryHistory>>(null);
 
-  useEffect(() => { setEmployees(storage.getAllEmployees()); }, [notice, error]);
-  useEffect(() => {
-    if (selectedId) setSalaryHistory(storage.getEmployeeSalaryHistory(selectedId));
-    else setSalaryHistory(null);
-  }, [selectedId, notice, error]);
-
+  const employees = data.employees;
+  const salaryHistory = selectedId ? storage.getEmployeeSalaryHistory(data, selectedId) : null;
   const selected = selectedId ? employees.find(e => e.id === selectedId) : null;
 
   function openAdd() {
@@ -1714,11 +1449,11 @@ export function EmployeesWorkspace() {
     if (!form.name.trim()) return;
     const openingAdvancePaise = form.openingAdvance !== '' ? Math.round(Number(form.openingAdvance) * 100) : undefined;
     const openingDuePaise = form.openingDue !== '' ? Math.round(Number(form.openingDue) * 100) : undefined;
-    run(() => {
+    run(async () => {
       if (editingEmployee) {
-        storage.updateEmployee(editingEmployee.id, { name: form.name.trim(), phone: form.phone, openingAdvancePaise: openingAdvancePaise ?? editingEmployee.openingAdvancePaise, openingDuePaise: openingDuePaise ?? editingEmployee.openingDuePaise });
+        return storage.updateEmployee(editingEmployee.id, { name: form.name.trim(), phone: form.phone, openingAdvancePaise: openingAdvancePaise ?? editingEmployee.openingAdvancePaise, openingDuePaise: openingDuePaise ?? editingEmployee.openingDuePaise }, data);
       } else {
-        storage.addEmployee({ name: form.name.trim(), phone: form.phone, openingAdvancePaise: openingAdvancePaise ?? 0, openingDuePaise: openingDuePaise ?? 0 });
+        return storage.addEmployee({ name: form.name.trim(), phone: form.phone, openingAdvancePaise: openingAdvancePaise ?? 0, openingDuePaise: openingDuePaise ?? 0 });
       }
     });
     setShowForm(false);
@@ -1728,7 +1463,7 @@ export function EmployeesWorkspace() {
 
   function handleDelete(emp: storage.Employee) {
     if (window.confirm(`Delete employee "${emp.name}"?`)) {
-      run(() => storage.deleteEmployee(emp.id));
+      run(async () => storage.deleteEmployee(emp.id));
       if (selectedId === emp.id) setSelectedId(null);
     }
   }
