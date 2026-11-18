@@ -203,12 +203,12 @@ export default function ExpensesWorkspace() {
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  function handleDelete(expense: storage.Expense) {
+  async function handleDelete(expense: storage.Expense) {
     const label = expense.category === 'salary'
       ? `salary expense for ${expense.employeeName}`
       : expense.customName || CATEGORY_LABELS[expense.category];
     if (window.confirm(`Delete this ${label} expense?`)) {
-      run(async () => storage.deleteExpense(expense.id));
+      await run(async () => storage.deleteExpense(expense.id));
     }
   }
 
