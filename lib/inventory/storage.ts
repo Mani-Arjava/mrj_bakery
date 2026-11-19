@@ -743,6 +743,29 @@ export async function updateSaleInvoice(invoiceId: string, input: Omit<SaleInvoi
   });
 }
 
+export async function deleteSaleInvoice(invoiceId: string): Promise<void> {
+  const oldMovesSnap = await getDocs(query(col('stockMovements'), where('sourceId', '==', invoiceId)));
+  const oldMovStockMap: Record<string, number> = {};
+  oldMovesSnap.docs.forEach(d => {
+    const m = d.data() as StockMovement;
+    oldMovStockMap[m.productionItemId] = (oldMovStockMap[m.productionItemId] ?? 0) + m.quantityPieces;
+  });
+  await runTransaction(db, async tx => {
+    const invoiceSnap = await tx.get(doc(db, 'saleInvoices', invoiceId));
+    if (!invoiceSnap.exists()) throw new Error('Invoice not found.');
+    const invoice = invoiceSnap.data() as SaleInvoice;
+    const customerSnap = await tx.get(doc(db, 'customers', invoice.customerId));
+    if (!customerSnap.exists()) throw new Error('Customer not found.');
+    const customer = customerSnap.data() as Customer;
+    const net = customer.outstandingPaise - customer.advancePaise - invoice.outstandingPaise;
+    tx.update(doc(db, 'customers', invoice.customerId), { outstandingPaise: net >= 0 ? net : 0, advancePaise: net < 0 ? -net : 0 });
+    for (const [piId, qty] of Object.entries(oldMovStockMap))
+      tx.update(doc(db, 'productionItems', piId), { currentStockPieces: increment(qty) });
+    oldMovesSnap.docs.forEach(d => tx.delete(d.ref));
+    tx.delete(doc(db, 'saleInvoices', invoiceId));
+  });
+}
+
 // ========== EMPLOYEES ==========
 export async function addEmployee(input: Omit<Employee, 'id' | 'advancePaise' | 'duePaise'> & { openingAdvancePaise?: number; openingDuePaise?: number }): Promise<Employee> {
   const { openingAdvancePaise, openingDuePaise, ...rest } = input;
