@@ -95,6 +95,10 @@ export function emptyData(): InventoryData {
 }
 function id(): string { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`; }
 function col(name: keyof InventoryData) { return collection(db, name); }
+// Firestore rejects `undefined` field values — strip them before every write.
+function su<T extends object>(obj: T): T {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as T;
+}
 
 /** Compute net salary advance/due effect across all expenses for an employee (positive = advance, negative = due). */
 export function computeEmployeeNetFromExpenses(expenses: Expense[], employeeId: string): number {
@@ -311,7 +315,7 @@ export function getPLDates(data: InventoryData): string[] {
 // ========== SUPPLIERS ==========
 export async function addSupplier(input: Omit<Supplier, 'id'>): Promise<Supplier> {
   const supplier: Supplier = { id: id(), ...input };
-  await setDoc(doc(db, 'suppliers', supplier.id), supplier);
+  await setDoc(doc(db, 'suppliers', supplier.id), su(supplier));
   return supplier;
 }
 
@@ -415,7 +419,7 @@ export async function deletePurchase(purchaseId: string): Promise<void> {
 // ========== PRODUCTION ITEMS ==========
 export async function addProductionItem(input: Omit<ProductionItem, 'id'>): Promise<ProductionItem> {
   const item: ProductionItem = { id: id(), ...input, currentStockPieces: 0 };
-  await setDoc(doc(db, 'productionItems', item.id), item);
+  await setDoc(doc(db, 'productionItems', item.id), su(item));
   return item;
 }
 
@@ -467,7 +471,7 @@ export async function deleteRecipe(productionItemId: string): Promise<void> {
 export async function addProduct(input: Omit<Product, 'id' | 'createdAt'>): Promise<Product> {
   const today = new Date().toISOString().slice(0, 10);
   const product: Product = { id: id(), ...input, createdAt: today, priceHistory: [{ date: today, retailPricePaise: input.pricePerPacketPaise, wholesalePricePaise: input.wholesalePricePerPacketPaise ?? 0 }] };
-  await setDoc(doc(db, 'products', product.id), product);
+  await setDoc(doc(db, 'products', product.id), su(product));
   return product;
 }
 
@@ -503,7 +507,7 @@ export async function addProductionBatch(input: Omit<ProductionBatch, 'id'>, dat
   const batchId = id();
   const batch: ProductionBatch = { id: batchId, ...input };
   const wb = writeBatch(db);
-  wb.set(doc(db, 'productionBatches', batchId), batch);
+  wb.set(doc(db, 'productionBatches', batchId), su(batch));
   // Deduct raw materials from items
   for (const mat of input.rawMaterials ?? [])
     wb.update(doc(db, 'items', mat.itemId), { quantity: increment(-mat.quantity) });
@@ -556,7 +560,7 @@ export async function updateProductionBatch(batchId: string, input: Omit<Product
       tx.update(doc(db, 'productionItems', piId), { currentStockPieces: increment(-qty) });
 
     // Apply new batch
-    tx.set(doc(db, 'productionBatches', batchId), { id: batchId, ...input });
+    tx.set(doc(db, 'productionBatches', batchId), su({ id: batchId, ...input }));
     // Deduct new materials
     for (const mat of input.rawMaterials ?? [])
       tx.update(doc(db, 'items', mat.itemId), { quantity: increment(-mat.quantity) });
@@ -660,7 +664,7 @@ export async function postSale(input: Omit<SaleInvoice, 'id'>, products: Product
       if (available < needed) throw new Error(`Insufficient stock for ${pi.name} (need ${needed} pcs, have ${available} pcs)`);
     }
     const invoice: SaleInvoice = { id: invoiceId, ...input };
-    tx.set(doc(db, 'saleInvoices', invoiceId), invoice);
+    tx.set(doc(db, 'saleInvoices', invoiceId), su(invoice));
     // Create stock movements + decrement currentStockPieces
     for (const line of input.lines) {
       const product = products.find(p => p.id === line.productId);
@@ -721,7 +725,7 @@ export async function updateSaleInvoice(invoiceId: string, input: Omit<SaleInvoi
       tx.update(doc(db, 'productionItems', piId), { currentStockPieces: increment(qty) });
     // Write updated invoice
     const updatedInvoice: SaleInvoice = { id: invoiceId, ...input };
-    tx.set(doc(db, 'saleInvoices', invoiceId), updatedInvoice);
+    tx.set(doc(db, 'saleInvoices', invoiceId), su(updatedInvoice));
     // Create new stock movements + decrement
     for (const line of input.lines) {
       const product = products.find(p => p.id === line.productId);
@@ -777,12 +781,12 @@ export async function addExpense(input: Omit<Expense, 'id'>): Promise<Expense> {
       const empSnap = await tx.get(empRef);
       if (!empSnap.exists()) throw new Error('Employee not found.');
       const emp = empSnap.data() as Employee;
-      tx.set(doc(db, 'expenses', expense.id), expense);
+      tx.set(doc(db, 'expenses', expense.id), su(expense));
       const net = emp.advancePaise - emp.duePaise + diff;
       tx.update(empRef, { advancePaise: net > 0 ? net : 0, duePaise: net < 0 ? -net : 0 });
     });
   } else {
-    await setDoc(doc(db, 'expenses', expense.id), expense);
+    await setDoc(doc(db, 'expenses', expense.id), su(expense));
   }
   return expense;
 }
@@ -803,11 +807,11 @@ export async function updateExpense(expenseId: string, updates: Omit<Expense, 'i
       let net = emp.advancePaise - emp.duePaise;
       if (oldHasSalary) net -= (oldExp.amountPaise - (oldExp.actualAmountPaise as number));
       if (newHasSalary) net += (updates.amountPaise - (updates.actualAmountPaise as number));
-      tx.set(doc(db, 'expenses', expenseId), { id: expenseId, ...updates });
+      tx.set(doc(db, 'expenses', expenseId), su({ id: expenseId, ...updates }));
       tx.update(empRef, { advancePaise: net > 0 ? net : 0, duePaise: net < 0 ? -net : 0 });
     });
   } else {
-    await setDoc(doc(db, 'expenses', expenseId), { id: expenseId, ...updates });
+    await setDoc(doc(db, 'expenses', expenseId), su({ id: expenseId, ...updates }));
   }
 }
 
