@@ -295,7 +295,7 @@ export function getPLSummary(data: InventoryData, date: string): PLDaySummary {
   const materialLines = Array.from(matMap.values());
   const salaryExpenses = expenses.filter(e => e.category === 'salary');
   const otherExpenses = expenses.filter(e => e.category !== 'salary');
-  const totalProductionValuePaise = productionLines.reduce((s, l) => s + l.retailValuePaise, 0);
+  const totalProductionValuePaise = productionLines.reduce((s, l) => s + l.wholesaleValuePaise, 0);
   const totalMaterialCostPaise = materialLines.reduce((s, l) => s + l.totalCostPaise, 0);
   const totalSalaryCostPaise = salaryExpenses.reduce((s, e) => s + e.amountPaise, 0);
   const totalOtherCostPaise = otherExpenses.reduce((s, e) => s + e.amountPaise, 0);

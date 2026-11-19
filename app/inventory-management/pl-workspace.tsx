@@ -104,7 +104,7 @@ export default function PLWorkspace() {
                     <th style={{ textAlign: 'right' }}>Qty</th>
                     <th style={{ textAlign: 'right' }}>Pieces</th>
                     <th style={{ textAlign: 'right' }}>Packets</th>
-                    <th style={{ textAlign: 'right' }}>Value (Retail)</th>
+                    <th style={{ textAlign: 'right' }}>Value (Wholesale)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -114,7 +114,7 @@ export default function PLWorkspace() {
                       <td style={{ textAlign: 'right' }}>{line.quantityInUnit} {line.unit}</td>
                       <td style={{ textAlign: 'right' }}>{Math.round(line.piecesProduced)}</td>
                       <td style={{ textAlign: 'right' }}>{line.packets % 1 === 0 ? line.packets : line.packets.toFixed(1)}</td>
-                      <td style={{ textAlign: 'right' }}><strong>{money(line.retailValuePaise)}</strong></td>
+                      <td style={{ textAlign: 'right' }}><strong>{money(line.wholesaleValuePaise)}</strong></td>
                     </tr>
                   ))}
                 </tbody>
