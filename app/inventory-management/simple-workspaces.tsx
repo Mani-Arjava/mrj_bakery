@@ -557,7 +557,8 @@ export function ProductionWorkspace() {
       const unit = product?.conversionUnit ?? 'KG';
       const pcs = pi.currentStockPieces ?? 0;
       const qty = count > 0 ? pcs / count : 0;
-      return { id: pi.id, name: pi.name, pcs, qty, unit };
+      const piecesPerPacket = product?.piecesPerPacket ?? 0;
+      return { id: pi.id, name: pi.name, pcs, qty, unit, piecesPerPacket };
     })
     .filter(pi => pi.pcs > 0);
 
@@ -789,12 +790,34 @@ export function ProductionWorkspace() {
     {availableStock.length > 0 && (
       <section className="im-panel">
         <div className="im-panel-title"><h2>Product Stock</h2></div>
-        {availableStock.map((pi, i) => (
-          <div key={i} className="production-summary-row">
-            <span>{pi.name}</span>
-            <b>{pi.qty.toLocaleString('en-IN', { maximumFractionDigits: 2 })} {pi.unit} · {pi.pcs.toLocaleString('en-IN')} pcs</b>
-          </div>
-        ))}
+        <div className="im-table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th style={{ textAlign: 'right' }}>Stock</th>
+                <th style={{ textAlign: 'right' }}>Packets</th>
+              </tr>
+            </thead>
+            <tbody>
+              {availableStock.map((pi, i) => {
+                const pkts = pi.piecesPerPacket > 0 ? Math.floor(pi.pcs / pi.piecesPerPacket) : null;
+                const rem = pi.piecesPerPacket > 0 ? pi.pcs % pi.piecesPerPacket : 0;
+                return (
+                  <tr key={i}>
+                    <td><b>{pi.name}</b></td>
+                    <td style={{ textAlign: 'right' }}>{pi.qty.toLocaleString('en-IN', { maximumFractionDigits: 2 })} {pi.unit} · {pi.pcs.toLocaleString('en-IN')} pcs</td>
+                    <td style={{ textAlign: 'right' }}>
+                      {pkts !== null
+                        ? <b>{pkts} pkts{rem > 0 ? ` · ${rem} pcs` : ''}</b>
+                        : <span className="im-muted">—</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </section>
     )}
 
