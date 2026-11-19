@@ -466,7 +466,7 @@ export function ProductionWorkspace() {
     setProdDrafts([{ productionItemId: '', quantity: '' }]);
   }
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const rawMaterials = matDrafts
       .filter(d => d.itemId && Number(d.quantity) > 0)
@@ -500,11 +500,11 @@ export function ProductionWorkspace() {
         return { productionItemId: item.id, productionItemName: item.name, quantity: Number(d.quantity), unit };
       });
     const batchData = { date, rawMaterials, productsProduced, notes: notes || undefined };
-    run(async () => {
+    const ok = await run(async () => {
       if (editingBatch) return storage.updateProductionBatch(editingBatch.id, batchData, data);
       else return storage.addProductionBatch(batchData, data);
     });
-    resetForm();
+    if (ok !== false) resetForm();
   }
 
   function startEdit(batch: storage.ProductionBatch) {
@@ -524,9 +524,9 @@ export function ProductionWorkspace() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function removeBatch(batch: storage.ProductionBatch) {
+  async function removeBatch(batch: storage.ProductionBatch) {
     if (window.confirm('Delete this production record? Raw material stock will be restored.'))
-      run(async () => storage.deleteProductionBatch(batch.id, data));
+      await run(async () => storage.deleteProductionBatch(batch.id, data));
   }
 
   const allProduction = storage.getAllProductionBatches(data);
